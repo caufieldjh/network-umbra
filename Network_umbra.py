@@ -140,12 +140,16 @@ for og in target_ogs:
 			predicted_net.append(ppi)
 			match_count = match_count +1
 
-#Remove duplicates and send to output
+#Remove duplicates predictions per species and send to output
 predicted_net_unique = []
+predicted_net_unique_alltaxid = []
 experimental_count = 0
 for ppi in predicted_net:
     if ppi not in predicted_net_unique:
         predicted_net_unique.append(ppi)
+	this_prediction = [ppi[0], ppi[2]]
+	if this_prediction not in predicted_net_unique_alltaxid:
+		predicted_net_unique_alltaxid.append(this_prediction)
 predicted_net = predicted_net_unique
 for ppi in predicted_net:			
 	if int(ppi[1]) == target_taxid:
@@ -171,7 +175,9 @@ for ppi in predicted_net:
 	activefile.write(out_string)
 	
 activefile.close()	
-print("Found " + str(match_count) + " interaction predictions.")
-print("Of these, at least " + str(experimental_count) + " are from experimental data for this species.") 
+print("Found " + str(match_count) + " interaction predictions (redundant by species).")
+print("Of these, at least " + str(experimental_count) + " are from experimental data for this species.")
+#it's "at least" because different studies use different taxids for the same species (i.e. different strains)
+print(str(len(predicted_net_unique_alltaxid)) + " interactions are in the predicted network.")
 print("See the results in " + activefile.name)
 sys.exit(0)
