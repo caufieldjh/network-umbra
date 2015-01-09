@@ -11,12 +11,14 @@
 #			Each line contains an OG first, a tab, and a unique protein-coding locus.
 #			An alternate filename may be specified as the first ARGV parameter.
 #		The second ARGV parameter is the NCBI taxon ID corresponding to the target.
-#OUTPUT: 'predicted_interactions.txt' - a file of the predicted interactions for the target species
-#			Each line includes an OG, a type of prediction),
-#			an interacting OG, and the ID of the original interaction.
+#OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
+#			Each line includes an OG, a type of prediction,
+#			an interacting OG, and the taxonomy ID of the original interaction source (usually a species).
 #			Interologs are evaluated by similarity of taxonomic lineage (not great but informative);
 #			Higher values indicate greater similarity to the target species and potentially
 #			better predictions or just broadly-conserved interactions.
+#		'noninteracting_OGs_[taxid].txt' - file containing OGs and loci from the target list not found 
+#			in any predicted interacions. They may still be in the consensus network somewhere.
 #		'umbra_taxid_db' - storage for similarities between genomes corresponding to taxon IDs.
 #			Created if it does not yet exist and appended if new (across all local sessions) taxon IDs are used.
 #
@@ -55,7 +57,7 @@ Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
 taxonomy_compare = 0
-
+       
 #Load consensus network file
 try:
 	consensusfile = open("consensus.sif")
@@ -102,6 +104,11 @@ try:
 	activefile = open(activefile_name, 'w')
 except IOError as e:
 	print("I/O error({0}): {1}".format(e.errno, e.strerror))
+noninteracting_file_name = "noninteracting_OGs_" + str(target_taxid) + ".txt"
+try: 
+	noninteracting_file = open(noninteracting_file_name, 'w')
+except IOError as e:
+	print("I/O error({0}): {1}".format(e.errno, e.strerror))
 	
 #Option - use taxids to build set of similarities
 #Just gets NCBI Taxonomy lineage for now
@@ -140,10 +147,12 @@ for og in target_ogs:
 			predicted_net.append(ppi)
 			match_count = match_count +1
 
-#Remove duplicates predictions per species and send to output
+#Remove duplicates predictions per species
 predicted_net_unique = []
 predicted_net_unique_alltaxid = []
-experimental_count = 0
+predicted_OG_coverage = []
+predicted_OG_coverage_unique = []
+experimental_count = 0 #The number of PPI already found for this taxid
 for ppi in predicted_net:
     if ppi not in predicted_net_unique:
         predicted_net_unique.append(ppi)
@@ -151,6 +160,12 @@ for ppi in predicted_net:
 	if this_prediction not in predicted_net_unique_alltaxid:
 		predicted_net_unique_alltaxid.append(this_prediction)
 predicted_net = predicted_net_unique
+predicted_OG_coverage = [x for y in predicted_net_unique_alltaxid for x in y]
+for og in predicted_OG_coverage:
+	if og not in predicted_OG_coverage_unique:
+		predicted_OG_coverage_unique.append(og)
+
+#Send to output
 for ppi in predicted_net:			
 	if int(ppi[1]) == target_taxid:
 		method = "Experimental results"
@@ -171,13 +186,19 @@ for ppi in predicted_net:
 		else:
 			method = "Predicted interolog"
 	out_string = (str(ppi[0]) + "\t" + method + "\t" + str(ppi[2]) + "\t" + str(ppi[1]) + "\n")
-	#print(out_string)
 	activefile.write(out_string)
+for og_and_prot in target_loci:
+	if og_and_prot[0] not in predicted_OG_coverage_unique:
+		out_string = (str(og_and_prot[0]) + "\t" + str(og_and_prot[1] + "\n"))
+		noninteracting_file.write(out_string)
 	
-activefile.close()	
+activefile.close()
+noninteracting_file.close()
+
 print("Found " + str(match_count) + " interaction predictions (redundant by species).")
 print("Of these, at least " + str(experimental_count) + " are from experimental data for this species.")
 #it's "at least" because different studies use different taxids for the same species (i.e. different strains)
 print(str(len(predicted_net_unique_alltaxid)) + " interactions are in the predicted network.")
+print("These interactions include " + str(len(predicted_OG_coverage_unique)) + " unique OGs.")
 print("See the results in " + activefile.name)
 sys.exit(0)
