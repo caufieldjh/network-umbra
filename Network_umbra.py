@@ -8,7 +8,7 @@
 #			An interaction may appear more than once in the consensus network.
 #		'target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
 #			This list should not contain duplicate proteins but can contain duplicate OGs.
-#			IMPLEMENTATION IN PROGRESS.
+#			Each line contains an OG first, a tab, and a unique protein-coding locus.
 #			An alternate filename may be specified as the first ARGV parameter.
 #		The second ARGV parameter is the NCBI taxon ID corresponding to the target.
 #OUTPUT: 'predicted_interactions.txt' - a file of the predicted interactions for the target species
@@ -56,7 +56,7 @@ Entrez.email = 'caufieldjh@vcu.edu'
 #Options
 taxonomy_compare = 0
 
-#Load files
+#Load consensus network file
 try:
 	consensusfile = open("consensus.sif")
 except IOError as e:
@@ -66,24 +66,37 @@ for line in consensusfile:
 	#print line
 	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
 	consensusPPI.append(one_consensusPPI)
-targetOGs = []
+
+#Load target file as default or as stated in argv	
 if (len(sys.argv)>1):
 	#print str(sys.argv[1])
 	targetfile = open(str(sys.argv[1]))
 	target_taxid = int(sys.argv[2])
 else:
 	try:
-		targetfile = open("target.txt")	#The test file is from T. pallidum Nichols, taxid 243276
-		target_taxid = 243276
+		targetfile = open("target.txt")	#The test file is from H. pylori 26695, taxid 85962
+		target_taxid = 85962
 	except IOError as e:
 		print("I/O error({0}): {1}".format(e.errno, e.strerror))
-for line in targetfile:					#Now updating to accept lines w/ proteins and OGs
-	targetOGs.append(line.rstrip('\t\n'))
+		
+#Store target proteins and OGs
+#Get information about target from Entrez
+target_loci = [] #Both OG and corresponding unique locus
+target_ogs = [] #Each OG will be unique in this list
+target_proteins = [] #Each locus, really
+for line in targetfile:
+	og_and_prot = re.split(r'\t+', line.rstrip('\t\n'))					
+	target_loci.append(og_and_prot)
+	if og_and_prot[0] not in target_ogs:
+		target_ogs.append(og_and_prot[0])
+	target_proteins.append(og_and_prot[0])
 target_handle = Entrez.efetch(db="Taxonomy", id=str(target_taxid), retmode="xml")
 target_records = Entrez.read(target_handle)
 target_name = target_records[0]["ScientificName"]
 target_lineage = target_records[0]["Lineage"]
-print("Predicting interactions for " + target_name)
+print("Predicting interactions for " + target_name +"\n")
+print("Unique OGs\tUnique proteins")
+print("%s\t\t%s") % (len(target_ogs), len(target_proteins))
 activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
 try:
 	activefile = open(activefile_name, 'w')
@@ -121,9 +134,9 @@ if taxonomy_compare == 1:
 #Set up predicted interaction network and search for presence of interactors
 predicted_net = []
 match_count = 0
-for og in targetOGs:
+for og in target_ogs:
 	for ppi in consensusPPI:
-		if og == ppi[0] and ppi[2] in targetOGs:
+		if og == ppi[0] and ppi[2] in target_ogs:
 			predicted_net.append(ppi)
 			match_count = match_count +1
 
