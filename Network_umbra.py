@@ -31,6 +31,8 @@
 #	generation of a consensus network and
 #	given a target proteome, generation of a new network from that set.
 #*Get counts of matched proteins, OGs, and pairs, and the same for all unmatched.
+#	To be biologically meaningful, this should include protein-coding loci w/o COG annotations.
+#	PPI matches should be counted as merged by species, too.
 #*Set up to be batch-run for many proteomes.
 #*Incorporate pair odds as per Rodgers-Melnick et al. 2013 BMC Genomics (ENTS PPI network prediction)
 #	These values need to be calculated per-species...or do they?
@@ -49,7 +51,6 @@
 #		There is also the GGDC method - http://ggdc.dsmz.de/ - but it only has an HTML interface
 #	Distance between proteins in OGs (requres OG comparisons)
 #	Essentiality in the target species (requires essentiality data)
-#*Include partial matches so "missing" interactors could be identified
 
 import sys, re
 from Bio import Entrez
@@ -71,7 +72,7 @@ for line in consensusfile:
 
 #Load target file as default or as stated in argv	
 if (len(sys.argv)>1):
-	#print str(sys.argv[1])
+	print str(sys.argv[1])
 	targetfile = open(str(sys.argv[1]))
 	target_taxid = int(sys.argv[2])
 else:
