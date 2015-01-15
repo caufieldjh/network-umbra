@@ -59,7 +59,7 @@ Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
 taxonomy_compare = 0
-batch_mode = 0
+batch_mode = 1
 
 #Methods
 def network_store(target, target_taxid):	
@@ -147,7 +147,7 @@ def network_store(target, target_taxid):
 	#it's "at least" because different studies use different taxids for the same species (i.e. different strains)
 	print(str(len(predicted_net_unique_alltaxid)) + " interactions are in the predicted network.")
 	print("These interactions include " + str(len(predicted_OG_coverage_unique)) + " unique OGs.")
-	print("See the results in " + activefile.name)
+	print("See the results in " + activefile.name + "\n")
 		
 #Load consensus network file
 try:
@@ -164,18 +164,20 @@ for line in consensusfile:
 if batch_mode == 0:	
 	if (len(sys.argv)>1):
 		try:
-			filename = open(str(sys.argv[1]))
+			targetfile = open(str(sys.argv[1]))
 		except IOError as e:
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
 		target_taxid = (re.split('-', sys.argv[1]))[0]
-		network_store(filename, target_taxid)
+		network_store(targetfile, target_taxid)
 	else:
 		print("No target specified.")
 		sys.exit(0)	
 else:
 	for filename in glob.glob('*target.txt'):
 		taxid = (re.split('-', filename))[0]
-		network_store(filename, taxid)
+		targetfile = open(filename)
+		network_store(targetfile, taxid)
+		targetfile.close()
 		
 #Option - use taxids to build set of similarities
 #Just gets NCBI Taxonomy lineage for now
