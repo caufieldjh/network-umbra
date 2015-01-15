@@ -3,14 +3,15 @@
 #Predicts interactions in a protein interaction network based off a consensus network.
 #REQUIRES: Biopython 1.65 or more recent
 #INPUT: 'consensus.sif' - a SIF file for the consensus network (interactions between OGs)
-#			Each line includes an OG, a species ID, and an interacting OG.
-#			Species IDs are names now but will be NCBI taxon IDs.
+#			Each line includes an OG, a species ID, an interacting OG, and an interaction score.
+#			Species IDs are NCBI taxon IDs.
 #			An interaction may appear more than once in the consensus network.
 #		'target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
 #			This list should not contain duplicate proteins but can contain duplicate OGs.
 #			Each line contains an OG first, a tab, and a unique protein-coding locus.
+#			The filename must have the format "[TAXID]-target.txt"
 #			An alternate filename may be specified as the first ARGV parameter.
-#		The second ARGV parameter is the NCBI taxon ID corresponding to the target.
+#			Or, use batch mode and it will open usable files with the above format.
 #OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
 #			Each line includes an OG, a type of prediction,
 #			an interacting OG, and the taxonomy ID of the original interaction source (usually a species).
@@ -52,13 +53,102 @@
 #	Distance between proteins in OGs (requres OG comparisons)
 #	Essentiality in the target species (requires essentiality data)
 
-import sys, re
+import sys, re, glob
 from Bio import Entrez
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
 taxonomy_compare = 0
-       
+batch_mode = 0
+
+#Methods
+def network_store(target, target_taxid):	
+	#Store target proteins and OGs
+	#Get information about target from Entrez
+	target_loci = [] #Both OG and corresponding unique locus
+	target_ogs = [] #Each OG will be unique in this list
+	target_proteins = [] #Each locus, really
+	for line in target:
+		og_and_prot = re.split(r'\t+', line.rstrip('\t\n'))					
+		target_loci.append(og_and_prot)
+		if og_and_prot[0] not in target_ogs:
+			target_ogs.append(og_and_prot[0])
+		target_proteins.append(og_and_prot[0])
+	target_handle = Entrez.efetch(db="Taxonomy", id=str(target_taxid), retmode="xml")
+	target_records = Entrez.read(target_handle)
+	target_name = target_records[0]["ScientificName"]
+	target_lineage = target_records[0]["Lineage"]
+	print("Predicting interactions for " + target_name +"\n")
+	print("Unique OGs\tUnique proteins")
+	print("%s\t\t%s") % (len(target_ogs), len(target_proteins))
+	activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
+	try:
+		activefile = open(activefile_name, 'w')
+	except IOError as e:
+		print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	noninteracting_file_name = "noninteracting_OGs_" + str(target_taxid) + ".txt"
+	try: 
+		noninteracting_file = open(noninteracting_file_name, 'w')
+	except IOError as e:
+		print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	#Set up predicted interaction network and search for presence of interactors
+	predicted_net = []
+	match_count = 0
+	for og in target_ogs:
+		for ppi in consensusPPI:
+			if og == ppi[0] and ppi[2] in target_ogs:
+				predicted_net.append(ppi)
+				match_count = match_count +1
+	#Remove duplicate predictions per species
+	predicted_net_unique = []
+	predicted_net_unique_alltaxid = []
+	predicted_OG_coverage = []
+	predicted_OG_coverage_unique = []
+	experimental_count = 0 #The number of PPI already found for this taxid
+	for ppi in predicted_net:
+	    if ppi not in predicted_net_unique:
+	        predicted_net_unique.append(ppi)
+		this_prediction = [ppi[0], ppi[2]]
+		if this_prediction not in predicted_net_unique_alltaxid:
+			predicted_net_unique_alltaxid.append(this_prediction)
+	predicted_net = predicted_net_unique
+	predicted_OG_coverage = [x for y in predicted_net_unique_alltaxid for x in y]
+	for og in predicted_OG_coverage:
+		if og not in predicted_OG_coverage_unique:
+			predicted_OG_coverage_unique.append(og)
+	#Send to output
+	for ppi in predicted_net:			
+		if (ppi[1]) == target_taxid:
+			method = "Experimental results"
+			experimental_count = experimental_count +1
+		else:
+			if taxonomy_compare == 1:				#Determine taxonomic lineage-based similarity if asked
+				taxid_db.seek(0,0)
+				level_match_score = 0
+				target_lineage_line = re.split(r';+', target_lineage)
+				for line in taxid_db:
+					split_line = re.split(r'\t+', line.rstrip('\t\n'))
+					if int(ppi[1]) == int(split_line[0]):
+						lineage_line = re.split(r';+', split_line[1])
+						for level in target_lineage_line:
+							if level in lineage_line:
+								level_match_score = level_match_score +1
+				method = "Predicted interolog, level " + str(level_match_score)
+			else:
+				method = "Predicted interolog"
+		out_string = (str(ppi[0]) + "\t" + method + "\t" + str(ppi[2]) + "\t" + str(ppi[1]) + "\n")
+		activefile.write(out_string)
+	for og_and_prot in target_loci:
+		if og_and_prot[0] not in predicted_OG_coverage_unique:
+			out_string = (str(og_and_prot[0]) + "\t" + str(og_and_prot[1] + "\n"))
+			noninteracting_file.write(out_string)
+	print("Found " + str(match_count) + " interaction predictions (redundant by species).")
+	print("Of these, at least " + str(experimental_count) + " are from experimental data for this species.")
+	#it's "at least" because different studies use different taxids for the same species (i.e. different strains)
+	print(str(len(predicted_net_unique_alltaxid)) + " interactions are in the predicted network.")
+	print("These interactions include " + str(len(predicted_OG_coverage_unique)) + " unique OGs.")
+	print("See the results in " + activefile.name)
+		
 #Load consensus network file
 try:
 	consensusfile = open("consensus.sif")
@@ -70,136 +160,49 @@ for line in consensusfile:
 	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
 	consensusPPI.append(one_consensusPPI)
 
-#Load target file as default or as stated in argv	
-if (len(sys.argv)>1):
-	print str(sys.argv[1])
-	targetfile = open(str(sys.argv[1]))
-	target_taxid = int(sys.argv[2])
+#Load target file as default or as stated in argv
+if batch_mode == 0:	
+	if (len(sys.argv)>1):
+		try:
+			filename = open(str(sys.argv[1]))
+		except IOError as e:
+			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+		target_taxid = (re.split('-', sys.argv[1]))[0]
+		network_store(filename, target_taxid)
+	else:
+		print("No target specified.")
+		sys.exit(0)	
 else:
-	try:
-		targetfile = open("target.txt")	#The test file is from H. pylori 26695, taxid 85962
-		target_taxid = 85962
-	except IOError as e:
-		print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	for filename in glob.glob('*target.txt'):
+		taxid = (re.split('-', filename))[0]
+		network_store(filename, taxid)
 		
-#Store target proteins and OGs
-#Get information about target from Entrez
-target_loci = [] #Both OG and corresponding unique locus
-target_ogs = [] #Each OG will be unique in this list
-target_proteins = [] #Each locus, really
-for line in targetfile:
-	og_and_prot = re.split(r'\t+', line.rstrip('\t\n'))					
-	target_loci.append(og_and_prot)
-	if og_and_prot[0] not in target_ogs:
-		target_ogs.append(og_and_prot[0])
-	target_proteins.append(og_and_prot[0])
-target_handle = Entrez.efetch(db="Taxonomy", id=str(target_taxid), retmode="xml")
-target_records = Entrez.read(target_handle)
-target_name = target_records[0]["ScientificName"]
-target_lineage = target_records[0]["Lineage"]
-print("Predicting interactions for " + target_name +"\n")
-print("Unique OGs\tUnique proteins")
-print("%s\t\t%s") % (len(target_ogs), len(target_proteins))
-activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
-try:
-	activefile = open(activefile_name, 'w')
-except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))
-noninteracting_file_name = "noninteracting_OGs_" + str(target_taxid) + ".txt"
-try: 
-	noninteracting_file = open(noninteracting_file_name, 'w')
-except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	
 #Option - use taxids to build set of similarities
 #Just gets NCBI Taxonomy lineage for now
 #Currently producing errors
-if taxonomy_compare == 1:
-	taxid_unique = []
-	taxid_new = []
-	try:
-		taxid_db = open('umbra_taxid_db', 'r+')
-		for line in taxid_db:
-			split_line = re.split(r'\t+', line.rstrip('\t\n'))
-			if split_line[0] not in taxid_unique:
-				taxid_unique.append(split_line[0])
-	except IOError as e:
-		print("Could not open similarity database or file not found.\nCreating new file.")
-		taxid_db = open('umbra_taxid_db', 'w')
-		print("Please wait...")
-	if target_taxid not in taxid_unique:
-		taxid_new.append(target_taxid)
-	for ppi in consensusPPI:
-		if ppi[1] not in taxid_unique:
-			taxid_new.append(ppi[1])
-		for taxid in taxid_new:
-			target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-			target_records = Entrez.read(target_handle)
-			target_name = target_records[0]["Lineage"]
-			print(target_name)
-			taxid_db.write(str(taxid) + "\t" + target_name + "\n")
+#if taxonomy_compare == 1:
+	#taxid_unique = []
+	#taxid_new = []
+	#try:
+		#taxid_db = open('umbra_taxid_db', 'r+')
+		#for line in taxid_db:
+			#split_line = re.split(r'\t+', line.rstrip('\t\n'))
+			#if split_line[0] not in taxid_unique:
+				#taxid_unique.append(split_line[0])
+	#except IOError as e:
+		#print("Could not open similarity database or file not found.\nCreating new file.")
+		#taxid_db = open('umbra_taxid_db', 'w')
+		#print("Please wait...")
+	#if target_taxid not in taxid_unique:
+		#taxid_new.append(target_taxid)
+	#for ppi in consensusPPI:
+		#if ppi[1] not in taxid_unique:
+			#taxid_new.append(ppi[1])
+		#for taxid in taxid_new:
+			#target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+			#target_records = Entrez.read(target_handle)
+			#target_name = target_records[0]["Lineage"]
+			#print(target_name)
+			#taxid_db.write(str(taxid) + "\t" + target_name + "\n")
 
-#Set up predicted interaction network and search for presence of interactors
-predicted_net = []
-match_count = 0
-for og in target_ogs:
-	for ppi in consensusPPI:
-		if og == ppi[0] and ppi[2] in target_ogs:
-			predicted_net.append(ppi)
-			match_count = match_count +1
-
-#Remove duplicates predictions per species
-predicted_net_unique = []
-predicted_net_unique_alltaxid = []
-predicted_OG_coverage = []
-predicted_OG_coverage_unique = []
-experimental_count = 0 #The number of PPI already found for this taxid
-for ppi in predicted_net:
-    if ppi not in predicted_net_unique:
-        predicted_net_unique.append(ppi)
-	this_prediction = [ppi[0], ppi[2]]
-	if this_prediction not in predicted_net_unique_alltaxid:
-		predicted_net_unique_alltaxid.append(this_prediction)
-predicted_net = predicted_net_unique
-predicted_OG_coverage = [x for y in predicted_net_unique_alltaxid for x in y]
-for og in predicted_OG_coverage:
-	if og not in predicted_OG_coverage_unique:
-		predicted_OG_coverage_unique.append(og)
-
-#Send to output
-for ppi in predicted_net:			
-	if int(ppi[1]) == target_taxid:
-		method = "Experimental results"
-		experimental_count = experimental_count +1
-	else:
-		if taxonomy_compare == 1:				#Determine taxonomic lineage-based similarity if asked
-			taxid_db.seek(0,0)
-			level_match_score = 0
-			target_lineage_line = re.split(r';+', target_lineage)
-			for line in taxid_db:
-				split_line = re.split(r'\t+', line.rstrip('\t\n'))
-				if int(ppi[1]) == int(split_line[0]):
-					lineage_line = re.split(r';+', split_line[1])
-					for level in target_lineage_line:
-						if level in lineage_line:
-							level_match_score = level_match_score +1
-			method = "Predicted interolog, level " + str(level_match_score)
-		else:
-			method = "Predicted interolog"
-	out_string = (str(ppi[0]) + "\t" + method + "\t" + str(ppi[2]) + "\t" + str(ppi[1]) + "\n")
-	activefile.write(out_string)
-for og_and_prot in target_loci:
-	if og_and_prot[0] not in predicted_OG_coverage_unique:
-		out_string = (str(og_and_prot[0]) + "\t" + str(og_and_prot[1] + "\n"))
-		noninteracting_file.write(out_string)
-	
-activefile.close()
-noninteracting_file.close()
-
-print("Found " + str(match_count) + " interaction predictions (redundant by species).")
-print("Of these, at least " + str(experimental_count) + " are from experimental data for this species.")
-#it's "at least" because different studies use different taxids for the same species (i.e. different strains)
-print(str(len(predicted_net_unique_alltaxid)) + " interactions are in the predicted network.")
-print("These interactions include " + str(len(predicted_OG_coverage_unique)) + " unique OGs.")
-print("See the results in " + activefile.name)
 sys.exit(0)
