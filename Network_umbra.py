@@ -34,7 +34,6 @@
 #*Get counts of matched proteins, OGs, and pairs, and the same for all unmatched.
 #	To be biologically meaningful, this should include protein-coding loci w/o COG annotations.
 #	PPI matches should be counted as merged by species, too.
-#*Set up to be batch-run for many proteomes.
 #*Incorporate pair odds as per Rodgers-Melnick et al. 2013 BMC Genomics (ENTS PPI network prediction)
 #	These values need to be calculated per-species...or do they?
 #	Should we instead use a log-likelihood function and just find the "unique" interactions?
@@ -53,7 +52,7 @@
 #	Distance between proteins in OGs (requres OG comparisons)
 #	Essentiality in the target species (requires essentiality data)
 
-import sys, re, glob
+import sys, re, glob, os
 from Bio import Entrez
 Entrez.email = 'caufieldjh@vcu.edu'
 
@@ -62,6 +61,7 @@ taxonomy_compare = 0
 batch_mode = 1
 
 #Methods
+
 def network_store(target, target_taxid):	
 	#Store target proteins and OGs
 	#Get information about target from Entrez
@@ -78,15 +78,12 @@ def network_store(target, target_taxid):
 	target_records = Entrez.read(target_handle)
 	target_name = target_records[0]["ScientificName"]
 	target_lineage = target_records[0]["Lineage"]
-	print("Predicting interactions for " + target_name +"\n")
-	print("Unique OGs\tUnique proteins")
-	print("%s\t\t%s") % (len(target_ogs), len(target_proteins))
 	activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
 	try:
 		activefile = open(activefile_name, 'w')
 	except IOError as e:
 		print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	noninteracting_file_name = "noninteracting_OGs_" + str(target_taxid) + ".txt"
+	noninteracting_file_name = "Noninteracting_OGs_" + str(target_taxid) + ".txt"
 	try: 
 		noninteracting_file = open(noninteracting_file_name, 'w')
 	except IOError as e:
@@ -138,29 +135,33 @@ def network_store(target, target_taxid):
 				method = "Predicted interolog"
 		out_string = (str(ppi[0]) + "\t" + method + "\t" + str(ppi[2]) + "\t" + str(ppi[1]) + "\n")
 		activefile.write(out_string)
+	activefile.close()
 	for og_and_prot in target_loci:
 		if og_and_prot[0] not in predicted_OG_coverage_unique:
 			out_string = (str(og_and_prot[0]) + "\t" + str(og_and_prot[1] + "\n"))
 			noninteracting_file.write(out_string)
-	print("Found " + str(match_count) + " interaction predictions (redundant by species).")
-	print("Of these, at least " + str(experimental_count) + " are from experimental data for this species.")
-	#it's "at least" because different studies use different taxids for the same species (i.e. different strains)
-	print(str(len(predicted_net_unique_alltaxid)) + " interactions are in the predicted network.")
-	print("These interactions include " + str(len(predicted_OG_coverage_unique)) + " unique OGs.")
-	print("See the results in " + activefile.name + "\n")
-		
+	noninteracting_file.close()
+	stats_output = [target_name, str(len(target_ogs)), str(len(target_proteins)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
+	print("\t".join(stats_output) + "\n")
+	
 #Load consensus network file
 try:
 	consensusfile = open("consensus.sif")
 except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
+	print("I/O error({0}): {1}".format(e.errno, e.strerror))
+print("Using " + consensusfile.name + " as the consensus network.")
 consensusPPI = []
 for line in consensusfile:
 	#print line
 	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
 	consensusPPI.append(one_consensusPPI)
+	
+#Set up the output format
+stats_header = ("Name\tUnique OGs\tUnique proteins\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+print(stats_header)
 
 #Load target file as default or as stated in argv
+#Run the network_store method to do the actual work
 if batch_mode == 0:	
 	if (len(sys.argv)>1):
 		try:
