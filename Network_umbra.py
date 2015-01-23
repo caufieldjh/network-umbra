@@ -2,14 +2,20 @@
 #Network_umbra.py
 #Predicts interactions in a protein interaction network based off a consensus network.
 #REQUIRES: Biopython 1.65 or more recent
-#INPUT: 'consensus.sif' - a SIF file for the consensus network (interactions between OGs)
-#			Each line includes an OG, a species ID, an interacting OG, and an interaction score.
+#INPUT: '*consensus*.txt' - a tab-delimited file for the consensus network (interactions between OGs)
+#			Each line includes five strings, in this order:
+#			an OG, 
+#			a species ID or a pair of IDs (format, "197 vs. 192222")
+#			a species name, ideally with a strain identifier, 
+#			an interacting OG,
+#			and an interaction type.
 #			Species IDs are NCBI taxon IDs.
+#			Interaction types are those defined by the PSI-MI vocabulary.  
 #			An interaction may appear more than once in the consensus network.
-#		'target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
+#		'TAXID-target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
 #			This list should not contain duplicate proteins but can contain duplicate OGs.
 #			Each line contains an OG first, a tab, and a unique protein-coding locus.
-#			The filename must have the format "[TAXID]-target.txt"
+#			The filename must have the format "TAXID-target.txt"
 #			An alternate filename may be specified as the first ARGV parameter.
 #			Or, use batch mode and it will open usable files with the above format.
 #OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
@@ -145,10 +151,17 @@ def network_store(target, target_taxid):
 	print("\t".join(stats_output) + "\n")
 	
 #Load consensus network file
+consensus_file_list = glob.glob('*consensus*.txt')
+if len(consensus_file_list) >1:
+	print("One consensus network at a time, please!")
+	sys.exit(0)
+if len(consensus_file_list) == 0:
+	print("No consensus network file found.")
+	sys.exit(0)
 try:
-	consensusfile = open("consensus.sif")
+	consensusfile = open(consensus_file_list[0])
 except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
 print("Using " + consensusfile.name + " as the consensus network.")
 consensusPPI = []
 for line in consensusfile:
