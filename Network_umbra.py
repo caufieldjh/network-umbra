@@ -19,11 +19,12 @@
 #			An alternate filename may be specified as the first ARGV parameter.
 #			Or, use batch mode and it will open usable files with the above format.
 #OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
-#			Each line includes an OG, a type of prediction,
-#			an interacting OG, and the taxonomy ID of the original interaction source (usually a species).
-#			Interologs are evaluated by similarity of taxonomic lineage (not great but informative);
-#			Higher values indicate greater similarity to the target species and potentially
-#			better predictions or just broadly-conserved interactions.
+#			Each line resembles those in the consensus network in content.
+#			An additional identifier is included to describe the type of prediction:
+#				Experimental results - this PPI has been found in results using this specific species and strain
+#				Experimental results, spoke expansion - as above but originally from a spoke expansion model
+#				Experimental results, related strain - this PPI has been found in results using the same species but different taxid
+#				Predicted interolog - this PPI has been found in results using a different species.
 #		'noninteracting_OGs_[taxid].txt' - file containing OGs and loci from the target list not found 
 #			in any predicted interacions. They may still be in the consensus network somewhere.
 #		'umbra_taxid_db' - storage for similarities between genomes corresponding to taxon IDs.
@@ -99,7 +100,7 @@ def network_store(target, target_taxid):
 	match_count = 0
 	for og in target_ogs:
 		for ppi in consensusPPI:
-			if og == ppi[0] and ppi[2] in target_ogs:
+			if og == ppi[0] and ppi[3] in target_ogs:
 				predicted_net.append(ppi)
 				match_count = match_count +1
 	#Remove duplicate predictions per species
@@ -119,13 +120,21 @@ def network_store(target, target_taxid):
 	for og in predicted_OG_coverage:
 		if og not in predicted_OG_coverage_unique:
 			predicted_OG_coverage_unique.append(og)
-	#Send to output
-	for ppi in predicted_net:			
-		if (ppi[1]) == target_taxid:
-			method = "Experimental results"
+	#Send to output and classify each interaction as experimental or predicted
+	#Should also search by name but that could take a while
+	for ppi in predicted_net:
+		ppi_taxid_pair = re.split(r' vs. ', ppi[1])			
+		if target_taxid in ppi_taxid_pair:
+			if target_taxid == ppi_taxid_pair[0] and target_taxid == ppi_taxid_pair[1]:
+				if ppi[4] == "association":
+					method = "Experimental results, spoke expansion"
+				else:	
+					method = "Experimental results"
+			else:
+				method = "Experimental results, related strain"
 			experimental_count = experimental_count +1
 		else:
-			if taxonomy_compare == 1:				#Determine taxonomic lineage-based similarity if asked
+			if taxonomy_compare == 1:	#Determine taxonomic lineage-based similarity if asked
 				taxid_db.seek(0,0)
 				level_match_score = 0
 				target_lineage_line = re.split(r';+', target_lineage)
@@ -139,12 +148,12 @@ def network_store(target, target_taxid):
 				method = "Predicted interolog, level " + str(level_match_score)
 			else:
 				method = "Predicted interolog"
-		out_string = (str(ppi[0]) + "\t" + method + "\t" + str(ppi[2]) + "\t" + str(ppi[1]) + "\n")
+		out_string = ("\t".join(ppi) + "\t" + method + "\n")
 		activefile.write(out_string)
 	activefile.close()
 	for og_and_prot in target_loci:
 		if og_and_prot[0] not in predicted_OG_coverage_unique:
-			out_string = (str(og_and_prot[0]) + "\t" + str(og_and_prot[1] + "\n"))
+			out_string = ("\t".join(og_and_prot) + "\n")
 			noninteracting_file.write(out_string)
 	noninteracting_file.close()
 	stats_output = [target_name, str(len(target_ogs)), str(len(target_proteins)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
@@ -156,7 +165,7 @@ if len(consensus_file_list) >1:
 	print("One consensus network at a time, please!")
 	sys.exit(0)
 if len(consensus_file_list) == 0:
-	print("No consensus network file found.")
+	print("No consensus network file found or may not be named properly.")
 	sys.exit(0)
 try:
 	consensusfile = open(consensus_file_list[0])
@@ -165,11 +174,10 @@ except IOError as e:
 print("Using " + consensusfile.name + " as the consensus network.")
 consensusPPI = []
 for line in consensusfile:
-	#print line
 	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
 	consensusPPI.append(one_consensusPPI)
 	
-#Set up the output format
+#Set up the output format for the general stats
 stats_header = ("Name\tUnique OGs\tUnique proteins\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
 print(stats_header)
 
@@ -187,7 +195,11 @@ if batch_mode == 0:
 		print("No target specified.")
 		sys.exit(0)	
 else:
-	for filename in glob.glob('*target.txt'):
+	target_file_list = glob.glob('*target.txt')
+	if len(target_file_list) == 0:
+		print("No target proteome files found, or may not be named properly.")
+		sys.exit(0)
+	for filename in target_file_list:
 		taxid = (re.split('-', filename))[0]
 		targetfile = open(filename)
 		network_store(targetfile, taxid)
