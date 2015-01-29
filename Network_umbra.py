@@ -75,9 +75,12 @@ def network_store(target, target_taxid):
 	target_loci = [] #Both OG and corresponding unique locus
 	target_ogs = [] #Each OG will be unique in this list
 	target_proteins = [] #Each locus, really
+	proteins_are_na = 0
 	for line in target:
 		og_and_prot = re.split(r'\t+', line.rstrip('\t\n'))					
 		target_loci.append(og_and_prot)
+		if og_and_prot[0] == "NA":
+			proteins_are_na = proteins_are_na + 1
 		if og_and_prot[0] not in target_ogs:
 			target_ogs.append(og_and_prot[0])
 		target_proteins.append(og_and_prot[0])
@@ -156,7 +159,7 @@ def network_store(target, target_taxid):
 			out_string = ("\t".join(og_and_prot) + "\n")
 			noninteracting_file.write(out_string)
 	noninteracting_file.close()
-	stats_output = [target_name, str(len(target_proteins)), str(len(target_ogs)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
+	stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(len(target_ogs)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
 	print("\t".join(stats_output) + "\n")
 	
 #Load consensus network file
@@ -178,7 +181,7 @@ for line in consensusfile:
 	consensusPPI.append(one_consensusPPI)
 	
 #Set up the output format for the general stats
-stats_header = ("Name\tUnique proteins\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+stats_header = ("Name\tUnique proteins\tProteins without OG\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
 print(stats_header)
 
 #Load target file as default or as stated in argv
