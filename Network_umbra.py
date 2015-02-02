@@ -1,63 +1,65 @@
 #!/usr/bin/python
 #Network_umbra.py
-#Predicts interactions in a protein interaction network based off a consensus network.
-#REQUIRES: Biopython 1.65 or more recent
-#INPUT: '*consensus*.txt' - a tab-delimited file for the consensus network (interactions between OGs)
-#			Each line includes five strings, in this order:
-#			an OG, 
-#			a species ID or a pair of IDs (format, "197 vs. 192222")
-#			a species name or a pair of species names, ideally with a strain identifier, 
-#			an interacting OG,
-#			and an interaction type.
-#			Species IDs are NCBI taxon IDs.
-#			Interaction types are those defined by the PSI-MI vocabulary.  
-#			An interaction may appear more than once in the consensus network.
-#		'TAXID-target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
-#			This list should not contain duplicate proteins but can contain duplicate OGs.
-#			Each line contains an OG first, a tab, and a unique protein-coding locus.
-#			The filename must have the format "TAXID-target.txt"
-#			An alternate filename may be specified as the first ARGV parameter.
-#			Or, use batch mode and it will open usable files with the above format.
-#OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
-#			Each line resembles those in the consensus network in content.
-#			An additional identifier is included to describe the type of prediction:
-#				Experimental results - this PPI has been found in results using this specific species and strain
-#				Experimental results, spoke expansion - as above but originally from a spoke expansion model
-#				Experimental results, related strain - this PPI has been found in results using the same species but different taxid
-#				Predicted interolog - this PPI has been found in results using a different species.
-#		'noninteracting_OGs_[taxid].txt' - file containing OGs and loci from the target list not found 
-#			in any predicted interacions. They may still be in the consensus network somewhere.
-#		'umbra_taxid_db' - storage for similarities between genomes corresponding to taxon IDs.
-#			Created if it does not yet exist and appended if new (across all local sessions) taxon IDs are used.
-#
-#At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
-#It needs to verify that both OGs in the predicted PPI are present in the target species.
-#Redundant predictions (the same interaction from the same taxon ID) are merged.
-#
-#PLANS:
-#This pipeline is really two main elements: 
-#	generation of a consensus network and
-#	given a target proteome, generation of a new network from that set.
-#*Get counts of matched proteins, OGs, and pairs, and the same for all unmatched.
-#	To be biologically meaningful, this should include protein-coding loci w/o COG annotations.
-#	PPI matches should be counted as merged by species, too.
-#*Incorporate pair odds as per Rodgers-Melnick et al. 2013 BMC Genomics (ENTS PPI network prediction)
-#	These values need to be calculated per-species...or do they?
-#	Should we instead use a log-likelihood function and just find the "unique" interactions?
-#*Parse the IntAct output directly or get it using PSICQUIC (not ideal for grabbing many PPI but good for details).
-#*Couple predicted interactions back to specific protein-coding genes in the target genome.
-#*Weight interactions by:
-#	Number of species seen in
-#	Distance between observed species (requires distance calculations and need to use unique species IDs)
-#		Will work on using Biopython modules for this
-#		Could just use existing NCBI taxonomy as a proxy but will have to pre-download as NCBI 
-#			doesn't like large queries. Do so at runtime and save locally for future runs.
-#		Can also handle with MUMer v.3 as per Deloger et al. 2008 J Bac
-#			(should still only compare genomes once and save to local database)
-#			But how to get it to play nice with Python?
-#		There is also the GGDC method - http://ggdc.dsmz.de/ - but it only has an HTML interface
-#	Distance between proteins in OGs (requres OG comparisons)
-#	Essentiality in the target species (requires essentiality data)
+'''
+Predicts interactions in a protein interaction network based off a consensus network.
+REQUIRES: Biopython 1.65 or more recent
+INPUT: '*consensus*.txt' - a tab-delimited file for the consensus network (interactions between OGs)
+			Each line includes five strings, in this order:
+			an OG, 
+			a species ID or a pair of IDs (format, "197 vs. 192222")
+			a species name or a pair of species names, ideally with a strain identifier, 
+			an interacting OG,
+			and an interaction type.
+			Species IDs are NCBI taxon IDs.
+			Interaction types are those defined by the PSI-MI vocabulary.  
+			An interaction may appear more than once in the consensus network.
+		'TAXID-target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
+			This list should not contain duplicate proteins but can contain duplicate OGs.
+			Each line contains an OG first, a tab, and a unique protein-coding locus.
+			The filename must have the format "TAXID-target.txt"
+			An alternate filename may be specified as the first ARGV parameter.
+			Or, use batch mode and it will open usable files with the above format.
+OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
+			Each line resembles those in the consensus network in content.
+			An additional identifier is included to describe the type of prediction:
+				Experimental results - this PPI has been found in results using this specific species and strain
+				Experimental results, spoke expansion - as above but originally from a spoke expansion model
+				Experimental results, related strain - this PPI has been found in results using the same species but different taxid
+				Predicted interolog - this PPI has been found in results using a different species.
+		'noninteracting_OGs_[taxid].txt' - file containing OGs and loci from the target list not found 
+			in any predicted interacions. They may still be in the consensus network somewhere.
+		'umbra_taxid_db' - storage for similarities between genomes corresponding to taxon IDs.
+			Created if it does not yet exist and appended if new (across all local sessions) taxon IDs are used.
+
+At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
+It needs to verify that both OGs in the predicted PPI are present in the target species.
+Redundant predictions (the same interaction from the same taxon ID) are merged.
+
+PLANS:
+This pipeline is really two main elements: 
+	generation of a consensus network and
+	given a target proteome, generation of a new network from that set.
+*Get counts of matched proteins, OGs, and pairs, and the same for all unmatched.
+	To be biologically meaningful, this should include protein-coding loci w/o COG annotations.
+	PPI matches should be counted as merged by species, too.
+*Incorporate pair odds as per Rodgers-Melnick et al. 2013 BMC Genomics (ENTS PPI network prediction)
+	These values need to be calculated per-species...or do they?
+	Should we instead use a log-likelihood function and just find the "unique" interactions?
+*Parse the IntAct output directly or get it using PSICQUIC (not ideal for grabbing many PPI but good for details).
+*Couple predicted interactions back to specific protein-coding genes in the target genome.
+*Weight interactions by:
+	Number of species seen in
+	Distance between observed species (requires distance calculations and need to use unique species IDs)
+		Will work on using Biopython modules for this
+		Could just use existing NCBI taxonomy as a proxy but will have to pre-download as NCBI 
+			doesn't like large queries. Do so at runtime and save locally for future runs.
+		Can also handle with MUMer v.3 as per Deloger et al. 2008 J Bac
+			(should still only compare genomes once and save to local database)
+			But how to get it to play nice with Python?
+		There is also the GGDC method - http://ggdc.dsmz.de/ - but it only has an HTML interface
+	Distance between proteins in OGs (requres OG comparisons)
+	Essentiality in the target species (requires essentiality data)
+'''
 
 import sys, re, glob, os
 from Bio import Entrez
@@ -69,9 +71,22 @@ batch_mode = 1
 
 #Methods
 
+def print_header(): 
+	#Set up the output format for the general stats
+	stats_header = ("Name\tUnique proteins\tProteins without OG\tProteins Not in PPI\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+	print(stats_header)
+
+def get_lineage(taxid):
+	#Get information about target from Entrez, but mostly name and parent taxid
+	target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+	target_records = Entrez.read(target_handle)
+	name = target_records[0]["ScientificName"]
+	lineage = target_records[0]["Lineage"] #Don't use this yet but might need it
+	parent = target_records[0]["ParentTaxId"]
+	return [name, lineage, parent]
+	
 def network_store(target, target_taxid):	
 	#Store target proteins and OGs
-	#Get information about target from Entrez
 	target_loci = [] #Both OG and corresponding unique locus
 	target_ogs = [] #Each OG will be unique in this list
 	target_proteins = [] #Each locus, really
@@ -84,13 +99,7 @@ def network_store(target, target_taxid):
 		if og_and_prot[0] not in target_ogs:
 			target_ogs.append(og_and_prot[0])
 		target_proteins.append(og_and_prot[0])
-	target_handle = Entrez.efetch(db="Taxonomy", id=str(target_taxid), retmode="xml")
-	target_records = Entrez.read(target_handle)
-	print(target_records)
-	target_name = target_records[0]["ScientificName"]
-	parent_taxid = target_records[0]["ParentTaxId"]
-	print(parent_taxid)
-	target_lineage = target_records[0]["Lineage"]
+	[target_name, target_lineage, parent_taxid] = get_lineage(target_taxid)
 	activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
 	try:
 		activefile = open(activefile_name, 'w')
@@ -127,7 +136,6 @@ def network_store(target, target_taxid):
 		if og not in predicted_OG_coverage_unique:
 			predicted_OG_coverage_unique.append(og)
 	#Send to output and classify each interaction as experimental or predicted
-	#Should also search by name but that could take a while
 	for ppi in predicted_net:
 		ppi_taxid_pair = re.split(r' vs. ', ppi[1])			
 		if (target_taxid in ppi_taxid_pair or parent_taxid in ppi_taxid_pair):
@@ -185,9 +193,7 @@ for line in consensusfile:
 	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
 	consensusPPI.append(one_consensusPPI)
 	
-#Set up the output format for the general stats
-stats_header = ("Name\tUnique proteins\tProteins without OG\tProteins Not in PPI\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
-print(stats_header)
+print_header()
 
 #Load target file as default or as stated in argv
 #Run the network_store method to do the actual work
