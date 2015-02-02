@@ -6,7 +6,7 @@
 #			Each line includes five strings, in this order:
 #			an OG, 
 #			a species ID or a pair of IDs (format, "197 vs. 192222")
-#			a species name, ideally with a strain identifier, 
+#			a species name or a pair of species names, ideally with a strain identifier, 
 #			an interacting OG,
 #			and an interaction type.
 #			Species IDs are NCBI taxon IDs.
@@ -154,12 +154,14 @@ def network_store(target, target_taxid):
 		out_string = ("\t".join(ppi) + "\t" + method + "\n")
 		activefile.write(out_string)
 	activefile.close()
+	non_interactor_count = 0
 	for og_and_prot in target_loci:
 		if og_and_prot[0] not in predicted_OG_coverage_unique:
 			out_string = ("\t".join(og_and_prot) + "\n")
 			noninteracting_file.write(out_string)
+			non_interactor_count = non_interactor_count + 1
 	noninteracting_file.close()
-	stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(len(target_ogs)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
+	stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(non_interactor_count), str(len(target_ogs)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
 	print("\t".join(stats_output) + "\n")
 	
 #Load consensus network file
@@ -181,7 +183,7 @@ for line in consensusfile:
 	consensusPPI.append(one_consensusPPI)
 	
 #Set up the output format for the general stats
-stats_header = ("Name\tUnique proteins\tProteins without OG\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+stats_header = ("Name\tUnique proteins\tProteins without OG\tProteins Not in PPI\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
 print(stats_header)
 
 #Load target file as default or as stated in argv
