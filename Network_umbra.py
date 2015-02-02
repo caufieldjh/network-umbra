@@ -86,7 +86,10 @@ def network_store(target, target_taxid):
 		target_proteins.append(og_and_prot[0])
 	target_handle = Entrez.efetch(db="Taxonomy", id=str(target_taxid), retmode="xml")
 	target_records = Entrez.read(target_handle)
+	print(target_records)
 	target_name = target_records[0]["ScientificName"]
+	parent_taxid = target_records[0]["ParentTaxId"]
+	print(parent_taxid)
 	target_lineage = target_records[0]["Lineage"]
 	activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
 	try:
@@ -127,7 +130,7 @@ def network_store(target, target_taxid):
 	#Should also search by name but that could take a while
 	for ppi in predicted_net:
 		ppi_taxid_pair = re.split(r' vs. ', ppi[1])			
-		if target_taxid in ppi_taxid_pair:
+		if (target_taxid in ppi_taxid_pair or parent_taxid in ppi_taxid_pair):
 			if target_taxid == ppi_taxid_pair[0] and target_taxid == ppi_taxid_pair[1]:
 				if ppi[4] == "association":
 					method = "Experimental results, spoke expansion"
@@ -135,7 +138,7 @@ def network_store(target, target_taxid):
 					method = "Experimental results"
 			else:
 				method = "Experimental results, related strain"
-			experimental_count = experimental_count +1
+			experimental_count = experimental_count +1	
 		else:
 			if taxonomy_compare == 1:	#Determine taxonomic lineage-based similarity if asked
 				taxid_db.seek(0,0)
