@@ -69,7 +69,7 @@ Entrez.email = 'caufieldjh@vcu.edu'
 taxonomy_compare = 0
 batch_mode = 1
 
-#Methods
+#Functions
 
 def print_header(): 
 	#Set up the output format for the general stats
