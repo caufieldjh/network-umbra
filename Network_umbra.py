@@ -68,12 +68,16 @@ Entrez.email = 'caufieldjh@vcu.edu'
 #Options
 taxonomy_compare = 0
 batch_mode = 1
+output_mode = 2	#Mode 1 is verbose. Mode 2 is primarily counts.
 
 #Functions
 
 def print_header(): 
 	#Set up the output format for the general stats
-	stats_header = ("Name\tUnique proteins\tProteins without OG\tProteins Not in PPI\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+	if output_mode == 1:
+		stats_header = ("Name\tUnique proteins\tProteins without OG\tProteins Not in PPI\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique Experimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+	elif output_mode == 2:
+		stats_header = ("Name\tUnique Proteins\tProteins with Exp. PPI\tProteins with Predicted PPI\tProteins not in PPI\n")
 	print(stats_header)
 
 def get_lineage(taxid):
@@ -85,7 +89,7 @@ def get_lineage(taxid):
 	parent = target_records[0]["ParentTaxId"]
 	return [name, lineage, parent]
 	
-def network_store(target, target_taxid):	
+def network_create(target, target_taxid):	
 	#Store target proteins and OGs
 	target_loci = [] #Both OG and corresponding unique locus
 	target_ogs = [] #Each OG will be unique in this list
@@ -98,7 +102,7 @@ def network_store(target, target_taxid):
 			proteins_are_na = proteins_are_na + 1
 		if og_and_prot[0] not in target_ogs:
 			target_ogs.append(og_and_prot[0])
-		target_proteins.append(og_and_prot[0])
+		target_proteins.append(og_and_prot)
 	[target_name, target_lineage, parent_taxid] = get_lineage(target_taxid)
 	activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
 	try:
@@ -123,7 +127,8 @@ def network_store(target, target_taxid):
 	predicted_net_unique_alltaxid = []
 	predicted_OG_coverage = []
 	predicted_OG_coverage_unique = []
-	experimental_count = 0 #The number of PPI already found for this taxid
+	experimental_OG_i = [] #OG-OG interactions specific to this and parental taxids
+	experimental_OG_i_unique = []
 	for ppi in predicted_net:
 	    if ppi not in predicted_net_unique:
 	        predicted_net_unique.append(ppi)
@@ -146,9 +151,15 @@ def network_store(target, target_taxid):
 					method = "Experimental results"
 			else:
 				method = "Experimental results, related strain"
-			experimental_count = experimental_count +1	
+			this_OG_i = [ppi[0], ppi[3]]
+			this_reverse_OG_i = [ppi[3], ppi[0]]
+			experimental_OG_i.append(this_OG_i)
+			if this_OG_i not in experimental_OG_i_unique:
+				if this_reverse_OG_i not in experimental_OG_i_unique:
+					experimental_OG_i_unique.append(this_OG_i)
 		else:
 			if taxonomy_compare == 1:	#Determine taxonomic lineage-based similarity if asked
+				#Doesn't work quite right yet
 				taxid_db.seek(0,0)
 				level_match_score = 0
 				target_lineage_line = re.split(r';+', target_lineage)
@@ -172,9 +183,31 @@ def network_store(target, target_taxid):
 			noninteracting_file.write(out_string)
 			non_interactor_count = non_interactor_count + 1
 	noninteracting_file.close()
-	stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(non_interactor_count), str(len(target_ogs)), str(match_count), str(experimental_count), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
+	if output_mode == 1:
+		stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(non_interactor_count), str(len(target_ogs)), str(match_count), str(len(experimental_OG_i)), str(len(experimental_OG_i_unique)), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
+	elif output_mode == 2:
+		i_exp_proteins = find_proteins_from_OGs(experimental_OG_i_unique, target_proteins)
+		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(target_proteins)-non_interactor_count), str(non_interactor_count)] #Note that predictions include the experimental results in the counts
 	print("\t".join(stats_output) + "\n")
 	
+def find_proteins_from_OGs(these_interactions = [], target = []):
+	unique_OGs = []
+	proteins = []
+	proteins_out = []
+	for interaction in these_interactions:
+		for OG in interaction:
+			if OG not in unique_OGs:
+				unique_OGs.append(OG)
+	for OG in unique_OGs:
+		for interactor in target:
+			if OG in interactor:
+				proteins.append(interactor[1])
+	for protein in proteins:
+		if protein not in proteins_out:
+			proteins_out.append(protein)
+	return proteins_out
+	
+#Main
 #Load consensus network file
 consensus_file_list = glob.glob('*consensus*.txt')
 if len(consensus_file_list) >1:
@@ -196,7 +229,7 @@ for line in consensusfile:
 print_header()
 
 #Load target file as default or as stated in argv
-#Run the network_store method to do the actual work
+#Run the network_create method to do the actual work
 if batch_mode == 0:	
 	if (len(sys.argv)>1):
 		try:
@@ -204,7 +237,7 @@ if batch_mode == 0:
 		except IOError as e:
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
 		target_taxid = (re.split('-', sys.argv[1]))[0]
-		network_store(targetfile, target_taxid)
+		network_create(targetfile, target_taxid)
 	else:
 		print("No target specified.")
 		sys.exit(0)	
@@ -216,7 +249,7 @@ else:
 	for filename in target_file_list:
 		taxid = (re.split('-', filename))[0]
 		targetfile = open(filename)
-		network_store(targetfile, taxid)
+		network_create(targetfile, taxid)
 		targetfile.close()
 		
 #Option - use taxids to build set of similarities
