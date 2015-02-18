@@ -75,9 +75,17 @@ output_mode = 2	#Mode 1 is verbose. Mode 2 is primarily counts.
 def print_header(): 
 	#Set up the output format for the general stats
 	if output_mode == 1:
-		stats_header = ("Name\tUnique proteins\tProteins without OG\tProteins Not in PPI\tUnique OGs\tTotal predicted PPI\tExperimental PPI\tUnique Experimental PPI\tUnique PPI in Predicted Network\tUnique OGs in Predicted Network\n")
+		stats_header = ("Name\tUnique proteins\tProteins without OG\t" + \
+						"Proteins Not in PPI\tUnique OGs\t" \
+						"Total predicted PPI\tExperimental PPI\t" + \
+						"Unique Experimental PPI\t" + \
+						"Unique PPI in Predicted Network\t" + \
+						"Unique OGs in Predicted Network\n")
 	elif output_mode == 2:
-		stats_header = ("Name\tUnique Proteins\tProteins with Exp. PPI\tProteins with Predicted PPI\tProteins not in PPI\n")
+		stats_header = ("Name\tUnique Proteins\tProteins with Exp. PPI\t" + \
+						"Proteins with Predicted PPI\tProteins not in PPI\t" + \
+						"Unique OGs\tOGs with Exp. Int.\t" + \
+						"OGs with Predicted Int.\tOGs not in Int.\n")
 	print(stats_header)
 
 def get_lineage(taxid):
@@ -187,7 +195,8 @@ def network_create(target, target_taxid):
 		stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(non_interactor_count), str(len(target_ogs)), str(match_count), str(len(experimental_OG_i)), str(len(experimental_OG_i_unique)), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
 	elif output_mode == 2:
 		i_exp_proteins = find_proteins_from_OGs(experimental_OG_i_unique, target_proteins)
-		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(target_proteins)-non_interactor_count), str(non_interactor_count)] #Note that predictions include the experimental results in the counts
+		i_exp_OGs = get_OGs_from_network(experimental_OG_i_unique)
+		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(target_proteins)-non_interactor_count), str(non_interactor_count), str(len(target_ogs)), str(len(i_exp_OGs)), str(len(predicted_OG_coverage_unique)), str(len(target_ogs) - len(predicted_OG_coverage_unique))] #Note that predictions include the experimental results in the counts
 	print("\t".join(stats_output) + "\n")
 	
 def find_proteins_from_OGs(these_interactions = [], target = []):
@@ -207,6 +216,14 @@ def find_proteins_from_OGs(these_interactions = [], target = []):
 			proteins_out.append(protein)
 	return proteins_out
 	
+def get_OGs_from_network(these_interactions = []):
+	unique_OGs = []
+	for interaction in these_interactions:
+		for OG in interaction:
+			if OG not in unique_OGs:
+				unique_OGs.append(OG)
+	return unique_OGs
+	
 #Main
 #Load consensus network file
 consensus_file_list = glob.glob('*consensus*.txt')
@@ -221,6 +238,8 @@ try:
 except IOError as e:
 	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
 print("Using " + consensusfile.name + " as the consensus network.")
+if output_mode == 2:
+	print("Note: predicted counts include experimental results.")
 consensusPPI = []
 for line in consensusfile:
 	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
