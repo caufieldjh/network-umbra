@@ -63,6 +63,7 @@ This pipeline is really two main elements:
 
 import sys, re, glob, os
 from Bio import Entrez
+
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
@@ -78,14 +79,15 @@ def print_header():
 		stats_header = ("Name\tUnique proteins\tProteins without OG\t" + \
 						"Proteins Not in PPI\tUnique OGs\t" \
 						"Total predicted PPI\tExperimental PPI\t" + \
-						"Unique Experimental PPI\t" + \
-						"Unique PPI in Predicted Network\t" + \
+						"Unique Experimental OG Int.\t" + \
+						"Unique OG Int. in Predicted Network\t" + \
 						"Unique OGs in Predicted Network\n")
 	elif output_mode == 2:
 		stats_header = ("Name\tUnique Proteins\tProteins with Exp. PPI\t" + \
 						"Proteins with Predicted PPI\tProteins not in PPI\t" + \
 						"Unique OGs\tOGs with Exp. Int.\t" + \
-						"OGs with Predicted Int.\tOGs not in Int.\n")
+						"OGs with Predicted Int.\tOGs not in Int.\t" + \
+						"Unique Experimental OG Int.\tUnique OG Int. in Predicted Network\n")
 	print(stats_header)
 
 def get_lineage(taxid):
@@ -196,7 +198,7 @@ def network_create(target, target_taxid):
 	elif output_mode == 2:
 		i_exp_proteins = find_proteins_from_OGs(experimental_OG_i_unique, target_proteins)
 		i_exp_OGs = get_OGs_from_network(experimental_OG_i_unique)
-		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(target_proteins)-non_interactor_count), str(non_interactor_count), str(len(target_ogs)), str(len(i_exp_OGs)), str(len(predicted_OG_coverage_unique)), str(len(target_ogs) - len(predicted_OG_coverage_unique))] #Note that predictions include the experimental results in the counts
+		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(target_proteins)-non_interactor_count), str(non_interactor_count), str(len(target_ogs)), str(len(i_exp_OGs)), str(len(predicted_OG_coverage_unique)), str(len(target_ogs) - len(predicted_OG_coverage_unique)), str(len(experimental_OG_i_unique)), str(len(predicted_net_unique_alltaxid))] #Note that predictions include the experimental results in the counts
 	print("\t".join(stats_output) + "\n")
 	
 def find_proteins_from_OGs(these_interactions = [], target = []):
@@ -270,7 +272,7 @@ else:
 		targetfile = open(filename)
 		network_create(targetfile, taxid)
 		targetfile.close()
-		
+			
 #Option - use taxids to build set of similarities
 #Just gets NCBI Taxonomy lineage for now
 #Currently producing errors
