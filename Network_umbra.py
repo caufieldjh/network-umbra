@@ -139,8 +139,8 @@ def network_create(target, target_taxid):
 	predicted_net_unique_alltaxid = []
 	predicted_OG_coverage = []
 	predicted_OG_coverage_unique = []
-	OG_i = []				#All OG-OG interactions in the predicted network
-	experimental_OG_i = [] #OG-OG interactions specific to this and parental taxids
+	OG_i = []				#All unique OG-OG interactions in the predicted network
+	experimental_OG_i = [] #unique OG-OG interactions specific to this and parental taxids
 	experimental_OG_i_unique = []
 	for ppi in predicted_net:
 	    if ppi not in predicted_net_unique:
@@ -157,7 +157,8 @@ def network_create(target, target_taxid):
 	for ppi in predicted_net:
 		ppi_taxid_pair = re.split(r' vs. ', ppi[1])
 		this_OG_i = [ppi[0], ppi[3]]
-		OG_i.append(this_OG_i)			
+		if this_OG_i not in OG_i:
+			OG_i.append(this_OG_i)			
 		if (target_taxid in ppi_taxid_pair or parent_taxid in ppi_taxid_pair):
 			if target_taxid == ppi_taxid_pair[0] and target_taxid == ppi_taxid_pair[1]:
 				if ppi[4] == "association":
@@ -203,7 +204,7 @@ def network_create(target, target_taxid):
 		i_exp_proteins = find_proteins_from_OGs(experimental_OG_i_unique, target_proteins)
 		i_pred_proteins = find_proteins_from_OGs(OG_i,target_proteins)
 		i_exp_OGs = get_OGs_from_network(experimental_OG_i_unique)
-		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(i_pred_proteins)), str(non_interactor_count), str(len(target_ogs)), str(len(i_exp_OGs)), str(len(predicted_OG_coverage_unique)), str(len(target_ogs) - len(predicted_OG_coverage_unique)), str(len(experimental_OG_i_unique)), str(len(predicted_net_unique_alltaxid))]
+		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(i_pred_proteins)), str(non_interactor_count), str(len(target_ogs)), str(len(i_exp_OGs)), str(len(predicted_OG_coverage_unique)), str(len(target_ogs) - len(predicted_OG_coverage_unique)), str(len(experimental_OG_i_unique)), str(len(OG_i))]
 	print("\t".join(stats_output) + "\n")
 	
 def find_proteins_from_OGs(these_interactions = [], target = []): 
