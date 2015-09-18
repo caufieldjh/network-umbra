@@ -11,15 +11,17 @@ INPUT: Downloads all available protein-protein interactions for bacteria from In
 		Downloads highest-level (LUCA) and bacteria-specific Uniprot ID to NOG mappings from eggNOG v.4.1.
 		Downloads highest-level (LUCA) bacteria-specific NOG annotations from eggNOG v.4.1.
 
-OUTPUT: 'metainteractome[date].txt'
+OUTPUT: 
+
+'metainteractome[date].txt'
 			A meta-interactome composed of all available bacterial protein-protein interactions.
 			Follows PSI-MI Tab27 format, with the addition of two ortholog identifiers per row.
 			See format description at https://code.google.com/p/psimi/wiki/PsimiTab27Format
 			
-		'meta_statistcs[date].txt'
+'meta_statistics[date].txt'
 			Contains statistics relevant to the produced meta-interactome.
 			
-		'consensus[date].txt'
+'consensus[date].txt'
 			A consensus meta-interactome composed of all available bacterial protein-protein interactions.
 			This set of interactions compresses all unique proteins into their corresponding orthologous groups.
 			Data in each column is the following, from left to right:
@@ -34,7 +36,7 @@ OUTPUT: 'metainteractome[date].txt'
 			FuncCatB		Functional category of the second interactor – see FuncCats tab
 			DescB		Description of the second interactor
 
-		'cons_statistics[date].txt'
+'cons_statistics[date].txt'
 			Contains statistics relevant to the produced consensus meta-interactome.
 
 At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
@@ -42,28 +44,28 @@ It needs to verify that both OGs in the predicted PPI are present in the target 
 Redundant predictions (the same interaction from the same taxon ID) are merged.
 
 CHANGES COMPLETE:
-Downloads eggNOG map file (LUCA-level and bacteria specific) and IntAct interactions (just bacteria specific)
-Generates meta-interactome and rudimentary consensus meta-interactome.
-IntAct data cleaned before using (removes "intact" and "chebi" interactors)
-A few basic counts (interactors and interactions) are made for meta-interactome and consensus sets
-Counts for all consensus interactions are also made across the whole meta-interactome and provided in consensus network
-Downloads the eggNOG annotation file for all NOGs but doesn't do anything with it yet
-Gets taxon IDs, names, and parent taxon IDs. Adds them to interactions in consensus network but doesn't compare to eliminate redundant taxids
+*Downloads eggNOG map file (LUCA-level and bacteria specific) and IntAct interactions (just bacteria specific)
+*Generates meta-interactome and rudimentary consensus meta-interactome.
+*IntAct data cleaned before using (removes "intact" and "chebi" interactors)
+*A few basic counts (interactors and interactions) are made for meta-interactome and consensus sets
+*Counts for all consensus interactions are also made across the whole meta-interactome and provided in consensus network
+*Downloads the eggNOG annotation file for all NOGs but doesn't do anything with it yet
+*Gets taxon IDs, names, and parent taxon IDs. Adds them to interactions in consensus network but doesn't compare to eliminate redundant taxids
 	Checks for parent and child relationships between taxon IDs to limit redundancy.
-Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Use them in the consensus network. 
+*Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Use them in the consensus network. 
 
 IN PROGRESS:
-*Are priorities
+**Are priorities
 
-*Some non-bacterial proteins are present within PPI in the input interaction set, or at least I found taxids for humans in the consensus. Check on why.
-*Verify that the taxids in the consensus really correspond to the interaction.
+**Some non-bacterial proteins are present within PPI in the input interaction set, or at least I found taxids for humans in the consensus. Check on why.
+**Verify that the taxids in the consensus really correspond to the interaction.
 	All taxids should have both interactors in their genomes.
-*Filter by FuncCat and produce subsets.
-Get counts and statistics for input data and various interactomes.
-Do interactome prediction for a given proteome.
-Use protein and species count from eggNOG (it's in the annotation file).
-Output interaction sets, filtered by FuncCat (and especially OG UFs).
-Perform ANOVA between different FuncCats to see consensus interaction patterns.
-*Assign methods to interactions (more general than original data, so we can detect spoke expansion)
-Download a proteome with a search query and set up OG mapping for it.
+**Filter by FuncCat and produce subsets.
+*Get counts and statistics for input data and various interactomes.
+*Do interactome prediction for a given proteome.
+*Use protein and species count from eggNOG (it's in the annotation file).
+*Output interaction sets, filtered by FuncCat (and especially OG UFs).
+*Perform ANOVA between different FuncCats to see consensus interaction patterns.
+**Assign methods to interactions (more general than original data, so we can detect spoke expansion)
+*Download a proteome with a search query and set up OG mapping for it.
 
