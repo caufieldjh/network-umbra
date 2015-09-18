@@ -1,72 +1,69 @@
-# network-umbra
+# network-umbra.py
 
-Predicts protein interactions using gene orthology and a combined consensus network.
+Predicts interactions in a protein interaction network based off a meta-interactome network.
+Uses eggNOG v.4.1.
 
-INPUT: 
+REQUIRES: Biopython 1.65 or more recent
+			Also needs ~500 MB of available disk space to accomodate data files amd output
+			More space may be necessary for proteome files.
 
-			'*consensus*.txt' - a tab-delimited file for the consensus network (interactions between OGs)
+INPUT: Downloads all available protein-protein interactions for bacteria from IntAct.
+		Downloads highest-level (LUCA) and bacteria-specific Uniprot ID to NOG mappings from eggNOG v.4.1.
+		Downloads highest-level (LUCA) bacteria-specific NOG annotations from eggNOG v.4.1.
+
+OUTPUT: 'metainteractome[date].txt'
+			A meta-interactome composed of all available bacterial protein-protein interactions.
+			Follows PSI-MI Tab27 format, with the addition of two ortholog identifiers per row.
+			See format description at https://code.google.com/p/psimi/wiki/PsimiTab27Format
 			
-			Each line includes five strings, in this order:
-
-			an OG, 
-
-			a species ID or a pair of IDs (format, "197 vs. 192222")
-
-			a species name, ideally with a strain identifier, 
-
-			an interacting OG,
-
-			and an interaction type.
-
-			Species IDs are NCBI taxon IDs.
-
-			Interaction types are those defined by the PSI-MI vocabulary.  
-
-			An interaction may appear more than once in the consensus network.
-
-		'TAXID-target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
-
-			This list should not contain duplicate proteins but can contain duplicate OGs.
-
-			Each line contains an OG first, a tab, and a unique protein-coding locus.
-
-			The filename must have the format "TAXID-target.txt"
-
-			An alternate filename may be specified as the first ARGV parameter.
-
-			Or, use batch mode and it will open usable files with the above format.
-
+		'meta_statistcs[date].txt'
+			Contains statistics relevant to the produced meta-interactome.
 			
+		'consensus[date].txt'
+			A consensus meta-interactome composed of all available bacterial protein-protein interactions.
+			This set of interactions compresses all unique proteins into their corresponding orthologous groups.
+			Data in each column is the following, from left to right:
+			InteractorA		The first interactor. Usually an OG.
+			InteractorB		The second interactor. Usually an OG.
+			InteractionCount		Count of individual PROTEIN interactions contributing to this consensus interaction, as per the meta-interactome.
+			TaxonCount		Count of different taxons (here, a proxy for species) corresponding to the interaction.
+				Similar taxons have been grouped together where possible, e.g. two different E. coli K-12 strains are just considered E. coli K-12.
+			Taxons		The taxons corresponding to this interaction.
+			FuncCatA		Functional category of the first interactor – see FuncCats tab
+			DescA		Description of the first interactor
+			FuncCatB		Functional category of the second interactor – see FuncCats tab
+			DescB		Description of the second interactor
 
-OUTPUT: 
-
-			'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
-
-			Each line resembles those in the consensus network in content.
-
-			An additional identifier is included to describe the type of prediction:
-
-				Experimental results - this PPI has been found in results using this specific species and strain
-
-				Experimental results, spoke expansion - as above but originally from a spoke expansion model
-
-				Experimental results, related strain - this PPI has been found in results using the same species but different taxid
-
-				Predicted interolog - this PPI has been found in results using a different species.
-
-		'noninteracting_OGs_[taxid].txt' - file containing OGs and loci from the target list not found 
-
-			in any predicted interacions. They may still be in the consensus network somewhere.
-
-		'umbra_taxid_db' - storage for similarities between genomes corresponding to taxon IDs.
-
-			Created if it does not yet exist and appended if new (across all local sessions) taxon IDs are used.
-
-			
+		'cons_statistics[date].txt'
+			Contains statistics relevant to the produced consensus meta-interactome.
 
 At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
-
 It needs to verify that both OGs in the predicted PPI are present in the target species.
-
 Redundant predictions (the same interaction from the same taxon ID) are merged.
+
+CHANGES COMPLETE:
+Downloads eggNOG map file (LUCA-level and bacteria specific) and IntAct interactions (just bacteria specific)
+Generates meta-interactome and rudimentary consensus meta-interactome.
+IntAct data cleaned before using (removes "intact" and "chebi" interactors)
+A few basic counts (interactors and interactions) are made for meta-interactome and consensus sets
+Counts for all consensus interactions are also made across the whole meta-interactome and provided in consensus network
+Downloads the eggNOG annotation file for all NOGs but doesn't do anything with it yet
+Gets taxon IDs, names, and parent taxon IDs. Adds them to interactions in consensus network but doesn't compare to eliminate redundant taxids
+	Checks for parent and child relationships between taxon IDs to limit redundancy.
+Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Use them in the consensus network. 
+
+IN PROGRESS:
+*Are priorities
+
+*Some non-bacterial proteins are present within PPI in the input interaction set, or at least I found taxids for humans in the consensus. Check on why.
+*Verify that the taxids in the consensus really correspond to the interaction.
+	All taxids should have both interactors in their genomes.
+*Filter by FuncCat and produce subsets.
+Get counts and statistics for input data and various interactomes.
+Do interactome prediction for a given proteome.
+Use protein and species count from eggNOG (it's in the annotation file).
+Output interaction sets, filtered by FuncCat (and especially OG UFs).
+Perform ANOVA between different FuncCats to see consensus interaction patterns.
+*Assign methods to interactions (more general than original data, so we can detect spoke expansion)
+Download a proteome with a search query and set up OG mapping for it.
 

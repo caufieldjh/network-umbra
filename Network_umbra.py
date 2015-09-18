@@ -1,107 +1,415 @@
 #!/usr/bin/python
 #Network_umbra.py
 '''
-Predicts interactions in a protein interaction network based off a consensus network.
+Predicts interactions in a protein interaction network based off a meta-interactome network.
+Uses eggNOG v.4.1.
+
 REQUIRES: Biopython 1.65 or more recent
-INPUT: '*consensus*.txt' - a tab-delimited file for the consensus network (interactions between OGs)
-			Each line includes five strings, in this order:
-			an OG, 
-			a species ID or a pair of IDs (format, "197 vs. 192222")
-			a species name or a pair of species names, ideally with a strain identifier, 
-			an interacting OG,
-			and an interaction type.
-			Species IDs are NCBI taxon IDs.
-			Interaction types are those defined by the PSI-MI vocabulary.  
-			An interaction may appear more than once in the consensus network.
-		'TAXID-target.txt' - a list of proteins and corresponding OGs present in the target genome/proteome.
-			This list should not contain duplicate proteins but can contain duplicate OGs.
-			Each line contains an OG first, a tab, and a unique protein-coding locus.
-			The filename must have the format "TAXID-target.txt"
-			An alternate filename may be specified as the first ARGV parameter.
-			Or, use batch mode and it will open usable files with the above format.
-OUTPUT: 'predicted_interactions_[taxid].txt' - a file of the predicted interactions for the target species
-			Each line resembles those in the consensus network in content.
-			An additional identifier is included to describe the type of prediction:
-				Experimental results - this PPI has been found in results using this specific species and strain
-				Experimental results, spoke expansion - as above but originally from a spoke expansion model
-				Experimental results, related strain - this PPI has been found in results using the same species but different taxid
-				Predicted interolog - this PPI has been found in results using a different species.
-		'noninteracting_OGs_[taxid].txt' - file containing OGs and loci from the target list not found 
-			in any predicted interacions. They may still be in the consensus network somewhere.
-		'umbra_taxid_db' - storage for similarities between genomes corresponding to taxon IDs.
-			Created if it does not yet exist and appended if new (across all local sessions) taxon IDs are used.
+			Also needs ~500 MB of available disk space to accomodate data files amd output
+			More space may be necessary for proteome files.
+
+INPUT: Downloads all available protein-protein interactions for bacteria from IntAct.
+		Downloads highest-level (LUCA) and bacteria-specific Uniprot ID to NOG mappings from eggNOG v.4.1.
+		Downloads highest-level (LUCA) bacteria-specific NOG annotations from eggNOG v.4.1.
+
+OUTPUT: 'metainteractome[date].txt'
+			A meta-interactome composed of all available bacterial protein-protein interactions.
+			Follows PSI-MI Tab27 format, with the addition of two ortholog identifiers per row.
+			See format description at https://code.google.com/p/psimi/wiki/PsimiTab27Format
+			
+		'meta_statistcs[date].txt'
+			Contains statistics relevant to the produced meta-interactome.
+			
+		'consensus[date].txt'
+			A consensus meta-interactome composed of all available bacterial protein-protein interactions.
+			This set of interactions compresses all unique proteins into their corresponding orthologous groups.
+			Data in each column is the following, from left to right:
+			InteractorA		The first interactor. Usually an OG.
+			InteractorB		The second interactor. Usually an OG.
+			InteractionCount		Count of individual PROTEIN interactions contributing to this consensus interaction, as per the meta-interactome.
+			TaxonCount		Count of different taxons (here, a proxy for species) corresponding to the interaction.
+				Similar taxons have been grouped together where possible, e.g. two different E. coli K-12 strains are just considered E. coli K-12.
+			Taxons		The taxons corresponding to this interaction.
+			FuncCatA		Functional category of the first interactor – see FuncCats tab
+			DescA		Description of the first interactor
+			FuncCatB		Functional category of the second interactor – see FuncCats tab
+			DescB		Description of the second interactor
+
+		'cons_statistics[date].txt'
+			Contains statistics relevant to the produced consensus meta-interactome.
 
 At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
 It needs to verify that both OGs in the predicted PPI are present in the target species.
 Redundant predictions (the same interaction from the same taxon ID) are merged.
 
-PLANS:
-This pipeline is really two main elements: 
-	generation of a consensus network and
-	given a target proteome, generation of a new network from that set.
-*Get counts of matched proteins, OGs, and pairs, and the same for all unmatched.
-	To be biologically meaningful, this should include protein-coding loci w/o COG annotations.
-	PPI matches should be counted as merged by species, too.
-*Incorporate pair odds as per Rodgers-Melnick et al. 2013 BMC Genomics (ENTS PPI network prediction)
-	These values need to be calculated per-species...or do they?
-	Should we instead use a log-likelihood function and just find the "unique" interactions?
-*Parse the IntAct output directly or get it using PSICQUIC (not ideal for grabbing many PPI but good for details).
-*Couple predicted interactions back to specific protein-coding genes in the target genome.
-*Weight interactions by:
-	Number of species seen in
-	Distance between observed species (requires distance calculations and need to use unique species IDs)
-		Will work on using Biopython modules for this
-		Could just use existing NCBI taxonomy as a proxy but will have to pre-download as NCBI 
-			doesn't like large queries. Do so at runtime and save locally for future runs.
-		Can also handle with MUMer v.3 as per Deloger et al. 2008 J Bac
-			(should still only compare genomes once and save to local database)
-			But how to get it to play nice with Python?
-		There is also the GGDC method - http://ggdc.dsmz.de/ - but it only has an HTML interface
-	Distance between proteins in OGs (requres OG comparisons)
-	Essentiality in the target species (requires essentiality data)
+CHANGES COMPLETE:
+Downloads eggNOG map file (LUCA-level and bacteria specific) and IntAct interactions (just bacteria specific)
+Generates meta-interactome and rudimentary consensus meta-interactome.
+IntAct data cleaned before using (removes "intact" and "chebi" interactors)
+A few basic counts (interactors and interactions) are made for meta-interactome and consensus sets
+Counts for all consensus interactions are also made across the whole meta-interactome and provided in consensus network
+Downloads the eggNOG annotation file for all NOGs but doesn't do anything with it yet
+Gets taxon IDs, names, and parent taxon IDs. Adds them to interactions in consensus network but doesn't compare to eliminate redundant taxids
+	Checks for parent and child relationships between taxon IDs to limit redundancy.
+Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Use them in the consensus network. 
+
+IN PROGRESS:
+*Are priorities
+
+*Some non-bacterial proteins are present within PPI in the input interaction set, or at least I found taxids for humans in the consensus. Check on why.
+*Verify that the taxids in the consensus really correspond to the interaction.
+	All taxids should have both interactors in their genomes.
+*Filter by FuncCat and produce subsets.
+Get counts and statistics for input data and various interactomes.
+Do interactome prediction for a given proteome.
+Use protein and species count from eggNOG (it's in the annotation file).
+Output interaction sets, filtered by FuncCat (and especially OG UFs).
+Perform ANOVA between different FuncCats to see consensus interaction patterns.
+*Assign methods to interactions (more general than original data, so we can detect spoke expansion)
+Download a proteome with a search query and set up OG mapping for it.
 '''
 
-import sys, re, glob, os
+import glob, gzip, os, re, sys, urllib2, zipfile
 from Bio import Entrez
+from datetime import date
 
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-taxonomy_compare = 0
-batch_mode = 1
-output_mode = 2	#Mode 1 is verbose. Mode 2 is primarily counts.
+
+output_mode = 1	#Mode 1 is verbose. Mode 2 is primarily counts.
 				#Predicted counts include experimental results but not vice-versa. 
 
 #Functions
 
-def print_header(): 
-	#Set up the output format for the general stats
-	if output_mode == 1:
-		stats_header = ("Name\tUnique proteins\tProteins without OG\t" + \
-						"Proteins Not in PPI\tUnique OGs\t" \
-						"Total predicted PPI\tExperimental PPI\t" + \
-						"Unique Experimental OG Int.\t" + \
-						"Unique OG Int. in Predicted Network\t" + \
-						"Unique OGs in Predicted Network\n")
-	elif output_mode == 2:
-		stats_header = ("Name\tUnique Proteins\tProteins with Exp. PPI and Direct Predictions\t" + \
-						"Proteins with Predicted PPI\tProteins not in PPI\t" + \
-						"Unique OGs\tOGs with Exp. Int.\t" + \
-						"OGs with Predicted Int.\tOGs not in Int.\t" + \
-						"Unique Experimental OG Int.\tUnique OG Int. in Predicted Network\n")
-						#Direct Predictions are for proteins sharing OGs
-	print(stats_header)
-
-def get_lineage(taxid):
-	#Get information about target from Entrez, but mostly name and parent taxid
-	target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-	target_records = Entrez.read(target_handle)
-	name = target_records[0]["ScientificName"]
-	lineage = target_records[0]["Lineage"] #Don't use this yet but might need it
-	parent = target_records[0]["ParentTaxId"]
-	return [name, lineage, parent]
+def get_eggnog_maps(): 
+	#Download and unzip the eggNOG Uniprot ID maps
+	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/id_mappings/uniprot/"
+	bactmapfilename = "uniprot-15-May-2015.Bacteria.tsv.gz"	#The Bacteria-specific mapping file
+	lucamapfilename = "uniprot-15-May-2015.LUCA.tsv.gz"	#The LUCA mapping file - more generic NOGs
 	
-def network_create(target, target_taxid):	
+	for mapfilename in [bactmapfilename, lucamapfilename]:
+		mapfilepath = baseURL + mapfilename
+		outfilepath = mapfilename[0:-3]
+		if os.path.isfile(mapfilename): 
+			print("Found compressed map file on disk: " + mapfilename)
+		else:
+			response = urllib2.urlopen(mapfilepath)
+			print("Downloading from " + mapfilepath)
+			compressed_file = open(os.path.basename(mapfilename), "w+b") #Start local compressed file
+			chunk = 1048576
+			while 1:
+				data = (response.read(chunk)) #Read one Mb at a time
+				compressed_file.write(data)
+				if not data:
+					print("\n" + mapfilename + " file download complete.")
+					compressed_file.close()
+					break
+				sys.stdout.write(".")
+			
+		print("Decompressing map file.")
+		with gzip.open(mapfilename) as infile: #Open that compressed file, read and write to uncompressed file
+			file_content = infile.read()
+			outfile = open(outfilepath, "w+b")
+			outfile.write(file_content)
+			infile.close()
+		outfile.close()
+	
+def get_interactions():
+	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
+	#Just uses IntAct for consistency, but could theoretically include other PSIQUIC compatible DB's
+	#May need to add more interactions to the file if not present in IntAct
+	#See format description here: https://code.google.com/p/psimi/wiki/PsimiTab27Format
+	
+	baseURL = "http://www.ebi.ac.uk/Tools/webservices/psicquic/intact/webservices/current/search/query/species:%22taxid:2%22?format=tab27"
+	intfilename = "intact-bacteria.tab"
+	
+	if os.path.isfile(intfilename): 
+		print("Found interaction file on disk: " + intfilename)
+	else:
+		response = urllib2.urlopen(baseURL)
+		print("Downloading from IntAct.")
+		intfile = open(os.path.basename(intfilename), "w+b") #Start local file
+		chunk = 1048576
+		while 1:
+			data = (response.read(chunk)) #Read one Mb at a time
+			intfile.write(data)
+			if not data:
+				print("\nInteraction file download complete.")
+				intfile.close()
+				break
+			sys.stdout.write(".")
+
+def get_eggnog_annotations():
+	#Downloads and extracts the eggNOG NOG annotations. 
+	baseURLs = ["http://eggnogdb.embl.de/download/latest/data/bactNOG/", "http://eggnogdb.embl.de/download/latest/data/NOG/"]
+	bactannfilename = "bactNOG.annotations.tsv.gz"	#The annotations for bacteria-specific NOGs
+	lucaannfilename = "NOG.annotations.tsv.gz"	#The annotations for other NOGs, but not bacteria-specific NOGs
+	
+	this_url = 0
+	for annfilename in [bactannfilename, lucaannfilename]:
+		annfilepath = baseURLs[this_url] + annfilename
+		this_url = this_url +1
+		outfilepath = annfilename[0:-3]
+		if os.path.isfile(annfilename): 
+			print("Found compressed annotation file on disk: " + annfilename)
+		else:
+			response = urllib2.urlopen(annfilepath)
+			print("Downloading from " + annfilepath)
+			compressed_file = open(os.path.basename(annfilename), "w+b") #Start local compressed file
+			chunk = 1048576
+			while 1:
+				data = (response.read(chunk)) #Read one Mb at a time
+				compressed_file.write(data)
+				if not data:
+					print("\n" + annfilename + " file download complete.")
+					compressed_file.close()
+					break
+				sys.stdout.write(".")
+		
+		print("Decompressing annotation file.")
+		with gzip.open(annfilename) as infile: #Open that compressed file, read and write to uncompressed file
+			file_content = infile.read()
+			outfile = open(outfilepath, "w+b")
+			outfile.write(file_content)
+			infile.close()
+		outfile.close()
+	
+def build_meta(mapping_file_list): 
+	#Sets up the meta-interactome network.
+	#Also creates statistics file about the meta-interactome.
+	#This means unique proteins become referred to by their OGs.
+	#Interactions are still unique, so two OGs may interact multiple times.
+	
+	nowstring = (date.today()).isoformat()
+	meta_network_filename = "metainteractome" + nowstring + ".txt"
+	meta_network_file = open(meta_network_filename, "w")
+	
+	map_array = []
+	interaction_file = open("intact-bacteria.tab")
+	interaction_array = []
+	protein_array = []
+	
+	print("Building meta-interactome...")
+	print("Arraying map files.")
+	for input_map_file in mapping_file_list:
+		try:
+			map_file = open(input_map_file)
+		except IOError as e:
+			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+		for line in map_file:
+			map_array.append((line.rstrip()).split("\t"))
+		map_file.close()
+		
+	print("Arraying interaction file and listing unique proteins.")
+	for line in interaction_file:
+		one_interaction = (line.rstrip()).split("\t")
+		interaction_ok = 1
+		for protein in one_interaction[0:2]:			#Add both proteins in the interacting pair to the unique protein set
+			if protein[0:6] == "intact" or protein[0:5] == "chebi":	#The interactor isn't a single protein with a Uniprot ID.
+				interaction_ok = 0	#Ensure the interaction line won't be kept later
+				break				#Ignore this interactor and the other in the pair
+		
+			this_protein = protein.lstrip("uniprotkb:")
+			if this_protein not in protein_array:
+				protein_array.append(this_protein)
+		#This is where the interaction cleanup step should go.
+		#Iterate back through the array and remove offending lines
+		#That is, those which aren't PPI.
+		if interaction_ok == 1:
+			interaction_array.append(one_interaction)
+		
+	interaction_file.close()
+	
+	print("Mapping OGs to " + str(len(protein_array)) + " proteins in " + str(len(interaction_array)) + " interactions. Proteins mapped:")
+	protein_OG_maps = {} #Dictionary to save protein-OG mapping specific for this interaction set
+	mapped_count = 0
+	proteins_without_OG = 0
+	for protein in protein_array:
+		mapped_count = mapped_count +1
+		if mapped_count % 10 == 0:
+			sys.stdout.write(".")
+			if mapped_count % 100 == 0:
+				sys.stdout.write(str(mapped_count))
+		matching_OG = protein	#If the protein doesn't map to an OG it retains its original ID
+		for mapping in map_array:
+			if protein == mapping[0]:
+				matching_OG = mapping[1]
+				break
+		if matching_OG == protein:	#If there wasn't an OG match, count it as a protein without an OG
+			proteins_without_OG = proteins_without_OG +1
+		protein_OG_maps[protein] = matching_OG
+	
+	print("\nWriting meta-interactome file. Interactions complete: ")
+	interaction_count = 0
+	for interaction in interaction_array:		#Write OGs for all interactions.
+		interaction_count = interaction_count +1
+		if interaction_count % 10 == 0:
+			sys.stdout.write(".")
+			if interaction_count % 100 == 0:
+				sys.stdout.write(str(interaction_count))
+				
+		for protein in interaction[0:2]:	#Get matching OGs for both proteins in the pair.
+			matching_OG = protein_OG_maps[protein.lstrip("uniprotkb:")]
+			interaction.append(matching_OG)
+			
+		interaction_out = "\t".join(interaction) + "\n"
+		meta_network_file.write(interaction_out)
+		
+		#print("mapped " + str(interaction_count) + " - " + matching_OG_A + " vs. " + matching_OG_B)
+	
+	meta_network_file.close()
+	
+	meta_stats_filename = "meta_statistics_" + nowstring + ".txt"
+	meta_stats_file = open(meta_stats_filename, "w")
+	stats_header = ("Unique proteins\tInteractions\tProteins without OG\n")
+	meta_stats_file.write(stats_header)
+	meta_statistics = []
+	for meta_stat in [len(protein_array), interaction_count, proteins_without_OG]:
+		meta_statistics.append(str(meta_stat))
+	meta_stats_file.write("\t".join(meta_statistics))
+	print("\nWrote meta-interactome statistics to " + meta_stats_filename)
+	meta_stats_file.close()
+
+	return meta_network_filename
+	
+def build_consensus(metafile, annotation_file_list): 
+	#Sets up the consensus meta-interactome network.
+	#This is identical to the meta-interactome but compresses interactions into their respective OGs.
+	#Interactors without OG assignment are retained and considered single-member OGs.
+	
+	#This should also count the number of taxons corresponding to an interaction, though it does not ATM
+	
+	nowstring = (date.today()).isoformat()
+	consensus_network_filename = "consensus" + nowstring + ".txt"
+	consensus_network_file = open(consensus_network_filename, "w")
+	
+	consensus_interactors = []	#Consensus interactome interactors - an OG where mapping is possible
+	all_interactions = []	#Meta-interactome interactions - unique by protein ID but contain OGs too.
+	consensus_interactions = []	#Consensus interactome interactions and associated data. Get written to output file.
+	taxid_species = {} #Dictionary to store taxids and their name and PARENT taxid.
+	all_annotations = [] #Annotations in file - a bit inefficient to load the whole thing but more searchable this way
+	consensus_annotations = {} #Dictionary to store functional category and descriptions of OG interactors.
+	
+	#First pass: create a list of unique interactions only, using OG IDs
+	print("Finding unique interactions.")
+	cons_interaction_count = 0
+	for line in metafile:
+		one_interaction = ((line.rstrip()).split("\t"))
+		new_interaction = 0
+		if one_interaction[42] not in consensus_interactors:	#Interactor A
+			consensus_interactors.append(one_interaction[42])
+			new_interaction = 1
+		if one_interaction[43] not in consensus_interactors:	#Interactor B	
+			consensus_interactors.append(one_interaction[43])
+			new_interaction = 1
+		if new_interaction == 1:
+			cons_interaction_count = cons_interaction_count +1
+			consensus_interactions.append([one_interaction[42], one_interaction[43]])
+		taxid_A = (((((one_interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+		taxid_B = (((((one_interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+		all_interactions.append([one_interaction[42], one_interaction[43], taxid_A, taxid_B])	#Get interactors AND taxid of source of both interactors
+	
+	#Get a list of all source taxids and convert to more generic versions from NCBI Taxonomy
+	#Need to do this as the same species may have multiple variants or taxids, e.g. "Escherichia coli" vs. "Escherichia coli K-12"
+	#We just want to know if an interaction applies to E. coli, for example
+	#Entrez from Bio package (Biopython) is used here
+	print("Listing interactor source taxids.")
+	all_taxids = []
+	for interaction in all_interactions:
+		for taxid in (interaction[2:4]):
+			if taxid not in all_taxids:
+				if taxid != "-":	#Why would we get this value anyway? Could be malformed entry as all interactions have taxids
+					all_taxids.append(taxid)
+	
+	#When comparing two entries, remember to compare both original and parent taxid.
+	for taxid in all_taxids:
+		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+		target_records = Entrez.read(target_handle)
+		taxid_name = target_records[0]["ScientificName"]
+		taxid_parent = target_records[0]["ParentTaxId"]
+		taxid_species[taxid] = [taxid_name, taxid_parent]
+			
+	#Second pass: count the number of interactions contributing to each consensus
+	#Compare taxids across interactions to see how many different sources interaction is seen for (i.e., X different species) 
+	#Add counts to each item in consensus_interactions
+	#The first count is the total occurence of the given interaction across the full meta-interactome
+	print("Counting interaction contributions.")
+	all_consensus_taxids = []
+	for interaction in consensus_interactions:
+		interaction_sources = []	#The list of taxids found to correspond to this interaction.
+		original_count = 0
+		#This gets a bit complicated.
+		for original_interaction in all_interactions:	#For each interaction in the set of all (not OG-compressed consensus) meta-interactome interactions...
+			if original_interaction[0] in interaction and original_interaction[1] in interaction: #If both interactors from the meta-interactome interaction are in the consensus interaction...
+				original_count = original_count +1	#Add to the count of this interaction across meta-interactome.
+				for taxid in original_interaction[2:4]:	#For both taxids corresponding to the meta-interactome interaction...
+					if taxid not in interaction_sources and taxid != "-":	#If the taxid isn't in the source taxids for this interaction yet...and isn't empty...
+						if (taxid_species[taxid])[1] not in interaction_sources:	#Check to see if the sources contain the taxid's parent taxid (if so, it's redundant)
+							for source in interaction_sources:
+								if (taxid_species[source])[1] == taxid:	#Check to see if taxid is a parent of existing sources (if so, remove children and just use parent)
+									interaction_sources.remove(source)
+								if (taxid_species[source])[1] == (taxid_species[taxid])[1]: #Check if taxids share a parent (if so, use parent taxid and drop children)
+									taxid = (taxid_species[source])[1]	#The problem here is that the parent taxid may not be in taxid_species since it's new to us
+									
+									#So we look it up and add it!
+									target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+									target_records = Entrez.read(target_handle)
+									taxid_name = target_records[0]["ScientificName"]
+									taxid_parent = target_records[0]["ParentTaxId"]
+									taxid_species[taxid] = [taxid_name, taxid_parent]
+									#This really should be its own function to limit redundancy
+									
+									interaction_sources.remove(source)
+							interaction_sources.append(taxid)
+		for source in interaction_sources:	#List all the taxids used across the consensus - does NOT care about parent/child relationships
+			if source not in all_consensus_taxids:
+				all_consensus_taxids.append(source)
+		interaction.append(str(original_count))
+		interaction.append(str(len(interaction_sources)))
+		interaction.append(" ".join(interaction_sources))
+	
+	#Third pass: get the functional categories and descriptions of all interactors
+	print("Adding interactor annotations.")
+	for input_ann_file in annotation_file_list:
+		try:
+			ann_file = open(input_ann_file)
+		except IOError as e:
+			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+		for line in ann_file:
+			all_annotations.append((line.rstrip()).split("\t"))
+		ann_file.close()
+	
+	for interactor in consensus_interactors:
+		consensus_annotations[interactor] = ["NA", "NA"] #Should only happen if OG not in description file (e.g. if it's unmapped to an OG)
+		for annotation in all_annotations:
+			if interactor == annotation[1]:
+				consensus_annotations[interactor] = [annotation[4], annotation[5]] #FuncCat and description
+				break
+	for interaction in consensus_interactions:
+		for interactor in interaction[0:2]:
+			interaction.append("\t".join(consensus_annotations[interactor]))
+				
+	print("Writing consensus meta-interactome file.")
+	for interaction in consensus_interactions:
+		consensus_network_file.write("\t".join(interaction) + "\n")
+	consensus_network_file.close()
+	
+	cons_stats_filename = "cons_statistics_" + nowstring + ".txt"
+	cons_stats_file = open(cons_stats_filename, "w")
+	stats_header = ("Unique interactors\tInteractions\tTaxids\n")
+	cons_stats_file.write(stats_header)
+	cons_statistics = []
+	for cons_stat in [len(consensus_interactors), cons_interaction_count, len(all_consensus_taxids)]:
+		cons_statistics.append(str(cons_stat))
+	cons_stats_file.write("\t".join(cons_statistics))
+	print("Wrote consensus meta-interactome statistics to " + cons_stats_filename)
+	cons_stats_file.close()
+	
+	return consensus_network_filename
+	
+'''
+def network_analyze(target, target_taxid):	#Not updated yet, just cannibalizing code
 	#Store target proteins and OGs
 	target_loci = [] #Both OG and corresponding unique locus
 	target_ogs = [] #Each OG will be unique in this list
@@ -232,80 +540,117 @@ def get_OGs_from_network(these_interactions = []):
 			if OG not in unique_OGs:
 				unique_OGs.append(OG)
 	return unique_OGs
+'''
 	
 #Main
-#Load consensus network file
-consensus_file_list = glob.glob('*consensus*.txt')
-if len(consensus_file_list) >1:
-	print("One consensus network at a time, please!")
-	sys.exit(0)
-if len(consensus_file_list) == 0:
-	print("No consensus network file found or may not be named properly.")
-	sys.exit(0)
+
+#Check for eggNOG mapping file and get if needed
+mapping_file_list = glob.glob('uniprot*.tsv')
+if len(mapping_file_list) >2:
+	sys.exit("Only expected two Uniprot to NOG mapping files. Check for duplicates.")
+if len(mapping_file_list) <2:
+	print("No eggNOG mapping files found or they're incomplete. Retrieving them.")
+	get_eggnog_maps()
+	mapping_file_list = glob.glob('uniprot*.tsv')
+	
+#Check for eggNOG annotation file and get if needed
+annotation_file_list = glob.glob('*annotations.tsv')
+if len(annotation_file_list) >2:
+	sys.exit("Only expected two eggNOG annotation files. Check for duplicates.")
+if len(annotation_file_list) <2:
+	print("No eggNOG annotation files found or they're incomplete. Retrieving them.")
+	get_eggnog_annotations()
+	annotation_file_list = glob.glob('*annotations.tsv')
+	
+#Check for protein interaction file and get if needed
+interaction_file_list = glob.glob('intact-bacteria.tab')
+if len(interaction_file_list) >1:
+	sys.exit("One protein interaction file at a time, please! Check for duplicates.")
+if len(interaction_file_list) == 0:
+	print("No protein interaction file found. Retrieving it.")
+	get_interactions()
+	interaction_file_list = glob.glob('intact-bacteria.tab')
 try:
-	consensusfile = open(consensus_file_list[0])
+	interactionfile = open(interaction_file_list[0])
+except IOError as e:
+	print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	
+#Load meta-interactome network file
+#Needs to be built first.
+meta_file_list = glob.glob('*metainteractome*.txt')
+new_meta = 0
+if len(meta_file_list) >1:
+	sys.exit("One meta-interactome network at a time, please!")
+if len(meta_file_list) == 0:
+	print("No meta-interactome network file found.")
+	build_meta_network = raw_input("Build a new meta-interactome? Y/N ")
+	if build_meta_network == "Y":
+		new_meta_filename = build_meta(mapping_file_list)
+		new_meta = 1
+	else:
+		sys.exit("Meta-network needed. Exiting.")
+
+try:
+	if new_meta == 1:
+		metafile = open(new_meta_filename)
+	else:
+		metafile = open(meta_file_list[0])
 except IOError as e:
 	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
-print("Using " + consensusfile.name + " as the consensus network.")
-if output_mode == 2:
-	print("Note: predicted counts include experimental results.")
-consensusPPI = []
-for line in consensusfile:
-	one_consensusPPI = re.split(r'\t+', line.rstrip('\t\n'))
-	consensusPPI.append(one_consensusPPI)
-	
-print_header()
+print("\nUsing " + metafile.name + " as the meta-interactome network.")
 
-#Load target file as default or as stated in argv
-#Run the network_create method to do the actual work
-if batch_mode == 0:	
-	if (len(sys.argv)>1):
-		try:
-			targetfile = open(str(sys.argv[1]))
-		except IOError as e:
-			print("I/O error({0}): {1}".format(e.errno, e.strerror))
-		target_taxid = (re.split('-', sys.argv[1]))[0]
-		network_create(targetfile, target_taxid)
+#Load consensus network file
+#Needs to be built first.
+consensus_file_list = glob.glob('*consensus*.txt')
+new_consensus = 0
+if len(consensus_file_list) >1:
+	sys.exit("One consensus network at a time, please!")
+if len(consensus_file_list) == 0:
+	print("No consensus network file found. Building one.")
+	description_file = open("bactNOG.annotations.tsv")
+	new_consensus_filename = build_consensus(metafile, annotation_file_list)
+	new_consensus = 1
+try:
+	if new_consensus == 1:
+		consensusfile = open(new_consensus_filename)
 	else:
-		print("No target specified.")
-		sys.exit(0)	
-else:
-	target_file_list = glob.glob('*target.txt')
-	if len(target_file_list) == 0:
-		print("No target proteome files found, or may not be named properly.")
-		sys.exit(0)
-	for filename in target_file_list:
-		taxid = (re.split('-', filename))[0]
-		targetfile = open(filename)
-		network_create(targetfile, taxid)
-		targetfile.close()
-			
-#Option - use taxids to build set of similarities
-#Just gets NCBI Taxonomy lineage for now
-#Currently producing errors
-#if taxonomy_compare == 1:
-	#taxid_unique = []
-	#taxid_new = []
-	#try:
-		#taxid_db = open('umbra_taxid_db', 'r+')
-		#for line in taxid_db:
-			#split_line = re.split(r'\t+', line.rstrip('\t\n'))
-			#if split_line[0] not in taxid_unique:
-				#taxid_unique.append(split_line[0])
-	#except IOError as e:
-		#print("Could not open similarity database or file not found.\nCreating new file.")
-		#taxid_db = open('umbra_taxid_db', 'w')
-		#print("Please wait...")
-	#if target_taxid not in taxid_unique:
-		#taxid_new.append(target_taxid)
-	#for ppi in consensusPPI:
-		#if ppi[1] not in taxid_unique:
-			#taxid_new.append(ppi[1])
-		#for taxid in taxid_new:
-			#target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-			#target_records = Entrez.read(target_handle)
-			#target_name = target_records[0]["Lineage"]
-			#print(target_name)
-			#taxid_db.write(str(taxid) + "\t" + target_name + "\n")
+		consensusfile = open(consensus_file_list[0])
+except IOError as e:
+	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
+print("\nUsing " + consensusfile.name + " as the consensus network.")
 
+#Quit now or ask for next step.
+requested = 0
+while requested == 0:
+	print("\n------------------------------------------------------------")
+	request_next = raw_input("Choose from the following options.\n" 
+		"A: Generate a subset of the consensus network.\n"
+		"B: Generate a predicted interactome for one or more proteomes.\n"
+		"X: Exit.\n") 
+	if request_next in ["x", "X"]:
+		sys.exit("Exiting...")
+	if request_next in ["a", "A"]:
+		print("Option under construction.")
+	if request_next in ["b", "B"]:
+		print("Option under construction.")
+	print("Choose from the list, please.")
+
+'''	
+target_file_list = glob.glob('*target.txt')
+if len(target_file_list) == 0:
+	print("No target proteome files found, or may not be named properly.")
+	one_target_file = raw_input("Provide the filename of one target proteome file")
+	else:
+		target_file_list.append(one_target_file)
+		single_proteome = 1
+for filename in target_file_list:
+	taxid = (re.split('-', filename))[0]
+	try:
+		targetfile = open(filename)
+	except IOError as e:
+		print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	network_analyze(targetfile, taxid)
+	targetfile.close()
+'''
+			
 sys.exit(0)
