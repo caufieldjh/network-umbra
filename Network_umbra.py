@@ -5,42 +5,47 @@ Predicts interactions in a protein interaction network based off a meta-interact
 Uses eggNOG v.4.1.
 
 REQUIRES: Biopython 1.65 or more recent
-			Also needs ~500 MB of available disk space to accomodate data files amd output
+			Also needs ~600 MB of available disk space to accomodate data files and output
 			More space may be necessary for proteome files.
 
 INPUT: Downloads all available protein-protein interactions for bacteria from IntAct.
+		Alternatively, uses a provided PPI data file in PSI-MI TAB 2.7 format.
+		REMOVE THE HEADER ROW if it's present!
 		Downloads highest-level (LUCA) and bacteria-specific Uniprot ID to NOG mappings from eggNOG v.4.1.
 		Downloads highest-level (LUCA) bacteria-specific NOG annotations from eggNOG v.4.1.
 
-OUTPUT: 'metainteractome[date].txt'
+OUTPUT: 
+'metainteractome[date].txt'
 			A meta-interactome composed of all available bacterial protein-protein interactions.
 			Follows PSI-MI Tab27 format, with the addition of two ortholog identifiers per row.
 			See format description at https://code.google.com/p/psimi/wiki/PsimiTab27Format
 			
-		'meta_statistcs[date].txt'
+'meta_statistcs[date].txt'
 			Contains statistics relevant to the produced meta-interactome.
 			
-		'consensus[date].txt'
+'consensus[date].txt'
 			A consensus meta-interactome composed of all available bacterial protein-protein interactions.
 			This set of interactions compresses all unique proteins into their corresponding orthologous groups.
 			Data in each column is the following, from left to right:
-			InteractorA		The first interactor. Usually an OG.
-			InteractorB		The second interactor. Usually an OG.
-			InteractionCount		Count of individual PROTEIN interactions contributing to this consensus interaction, as per the meta-interactome.
-			TaxonCount		Count of different taxons (here, a proxy for species) corresponding to the interaction.
-				Similar taxons have been grouped together where possible, e.g. two different E. coli K-12 strains are just considered E. coli K-12.
-			Taxons		The taxons corresponding to this interaction.
-			FuncCatA		Functional category of the first interactor – see FuncCats tab
-			DescA		Description of the first interactor
-			FuncCatB		Functional category of the second interactor – see FuncCats tab
-			DescB		Description of the second interactor
+InteractorA		The first interactor. Usually an OG.
+InteractorB		The second interactor. Usually an OG.
+InteractionCount		Count of individual PROTEIN interactions contributing to this consensus interaction, as per the meta-interactome.
+TaxonCount		Count of different taxons (here, a proxy for species) corresponding to the interaction.
+			Similar taxons have been grouped together where possible, e.g. two different E. coli K-12 strains are just considered E. coli K-12.
+Taxons		The taxons corresponding to this interaction.
+FuncCatA		Functional category of the first interactor
+DescA		Description of the first interactor
+FuncCatB		Functional category of the second interactor
+DescB		Description of the second interactor
 
-		'cons_statistics[date].txt'
+'cons_statistics[date].txt'
 			Contains statistics relevant to the produced consensus meta-interactome.
 
 At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
 It needs to verify that both OGs in the predicted PPI are present in the target species.
 Redundant predictions (the same interaction from the same taxon ID) are merged.
+
+Uses PSIQUIC service to retrieve IntAct data - see https://github.com/micommunity/psicquic
 
 CHANGES COMPLETE:
 Downloads eggNOG map file (LUCA-level and bacteria specific) and IntAct interactions (just bacteria specific)
@@ -52,20 +57,25 @@ Downloads the eggNOG annotation file for all NOGs but doesn't do anything with i
 Gets taxon IDs, names, and parent taxon IDs. Adds them to interactions in consensus network but doesn't compare to eliminate redundant taxids
 	Checks for parent and child relationships between taxon IDs to limit redundancy.
 Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Use them in the consensus network. 
+Provides the option to use a local file in lieu of a downloaded one (especially as PSIQUIC filtering may not provide what we want).
+Filters out any input interactions involving non-bacterial taxons (at the meta-interactome building step).
+Removes true cross-species interactions at the consensus network building step
 
 IN PROGRESS:
 *Are priorities
 
-*Some non-bacterial proteins are present within PPI in the input interaction set, or at least I found taxids for humans in the consensus. Check on why.
-*Verify that the taxids in the consensus really correspond to the interaction.
-	All taxids should have both interactors in their genomes.
+*Offer the option to append PPI data sets together, as long as they are all in the proper format.
 *Filter by FuncCat and produce subsets.
+	For subsets, would like to know similar interactions at the protein level.
+	E.g., if an OG UF interacts with the same kinds of proteins, what proteins are they AND what else interacts with them in different species?
 Get counts and statistics for input data and various interactomes.
 Do interactome prediction for a given proteome.
 Use protein and species count from eggNOG (it's in the annotation file).
 Output interaction sets, filtered by FuncCat (and especially OG UFs).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
+	Or at least get interaction frequencies by FuncCat (as in filtering goal above)
 *Assign methods to interactions (more general than original data, so we can detect spoke expansion)
+	Spoke expansion could actually be filtered out in the input set (use complex:"-") but would rather keep it.
 Download a proteome with a search query and set up OG mapping for it.
 '''
 
@@ -77,8 +87,6 @@ Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
 
-output_mode = 1	#Mode 1 is verbose. Mode 2 is primarily counts.
-				#Predicted counts include experimental results but not vice-versa. 
 
 #Functions
 
@@ -119,10 +127,12 @@ def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
 	#Just uses IntAct for consistency, but could theoretically include other PSIQUIC compatible DB's
 	#May need to add more interactions to the file if not present in IntAct
+	#The PSIQUIC interface may also not retrieve all available interactions or may not filter as desired,
+	#so script prompts for option.
 	#See format description here: https://code.google.com/p/psimi/wiki/PsimiTab27Format
 	
 	baseURL = "http://www.ebi.ac.uk/Tools/webservices/psicquic/intact/webservices/current/search/query/species:%22taxid:2%22?format=tab27"
-	intfilename = "intact-bacteria.tab"
+	intfilename = "protein-interactions.tab"
 	
 	if os.path.isfile(intfilename): 
 		print("Found interaction file on disk: " + intfilename)
@@ -175,7 +185,7 @@ def get_eggnog_annotations():
 			infile.close()
 		outfile.close()
 	
-def build_meta(mapping_file_list): 
+def build_meta(mapping_file_list, ppi_data): 
 	#Sets up the meta-interactome network.
 	#Also creates statistics file about the meta-interactome.
 	#This means unique proteins become referred to by their OGs.
@@ -185,10 +195,14 @@ def build_meta(mapping_file_list):
 	meta_network_filename = "metainteractome" + nowstring + ".txt"
 	meta_network_file = open(meta_network_filename, "w")
 	
+	all_taxids = []
+	all_filtered_taxids = []	#Will remove non-bacterial taxids
 	map_array = []
-	interaction_file = open("intact-bacteria.tab")
+	interaction_file = open(ppi_data)
 	interaction_array = []
+	interaction_filtered_array = []
 	protein_array = []
+	taxid_species = {} #Dictionary to store taxids and their name and PARENT taxid.
 	
 	print("Building meta-interactome...")
 	print("Arraying map files.")
@@ -201,27 +215,64 @@ def build_meta(mapping_file_list):
 			map_array.append((line.rstrip()).split("\t"))
 		map_file.close()
 		
-	print("Arraying interaction file and listing unique proteins.")
+	print("Arraying interaction file and creating lists of proteins and taxids.")
+	
 	for line in interaction_file:
 		one_interaction = (line.rstrip()).split("\t")
-		interaction_ok = 1
-		for protein in one_interaction[0:2]:			#Add both proteins in the interacting pair to the unique protein set
-			if protein[0:6] == "intact" or protein[0:5] == "chebi":	#The interactor isn't a single protein with a Uniprot ID.
-				interaction_ok = 0	#Ensure the interaction line won't be kept later
-				break				#Ignore this interactor and the other in the pair
-		
-			this_protein = protein.lstrip("uniprotkb:")
-			if this_protein not in protein_array:
-				protein_array.append(this_protein)
-		#This is where the interaction cleanup step should go.
-		#Iterate back through the array and remove offending lines
-		#That is, those which aren't PPI.
-		if interaction_ok == 1:
-			interaction_array.append(one_interaction)
-		
+		for taxid in [one_interaction[9], one_interaction[10]]:
+			taxid = (((((taxid.split("|"))[0]).lstrip("taxid:")).split("("))[0])
+			if taxid not in all_taxids and taxid != "-": #Need to start filtering taxids here so we don't pass bad values to Entrez
+				#Why would we get this value anyway? Could be malformed entry as all interactions should have taxids
+				all_taxids.append(taxid)	#Just the raw taxid list
+		interaction_array.append(one_interaction)	#This is just the raw interaction list at this point
+	
 	interaction_file.close()
 	
-	print("Mapping OGs to " + str(len(protein_array)) + " proteins in " + str(len(interaction_array)) + " interactions. Proteins mapped:")
+	
+	print("Finding details for interactor taxids.")
+	
+	for taxid in all_taxids:
+		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+		target_records = Entrez.read(target_handle)
+		taxid_name = target_records[0]["ScientificName"]
+		taxid_parent = target_records[0]["ParentTaxId"]
+		taxid_division = target_records[0]["Division"]
+		if taxid_division == "Bacteria":	#Restrict the set to bacteria!
+			taxid_species[taxid] = [taxid_name, taxid_parent, taxid_division]
+			if taxid not in all_filtered_taxids:
+				all_filtered_taxids.append(taxid)
+				sys.stdout.write(".")
+			#print(taxid_species[taxid])	
+	
+	print("\nCleaning up data by removing non-protein and non-bacterial interactors.")
+	interactions_removed = 0
+	for interaction in interaction_array:
+		interaction_ok = 1
+		for taxid in [interaction[9], interaction[10]]:
+			taxid = (((((taxid.split("|"))[0]).lstrip("taxid:")).split("("))[0])
+			if taxid not in all_filtered_taxids:
+				interaction_ok = 0	#Ensure the interaction won't be kept later
+				break				#Ignore this interactor and the other in the pair
+		if interaction_ok == 1:
+			for protein in interaction[0:2]:			#both proteins in the interacting pair
+				if protein[0:6] == "intact" or protein[0:5] == "chebi":	#If the interactor isn't a single protein...
+					interaction_ok = 0	#Ensure the interaction won't be kept later
+					break				#Ignore this interactor and the other in the pair
+				this_protein = protein.lstrip("uniprotkb:")
+				if this_protein not in protein_array:
+					protein_array.append(this_protein)
+			if interaction not in interaction_filtered_array:
+				interaction_filtered_array.append(interaction)
+		else:
+			interactions_removed = interactions_removed +1
+				
+		
+	print("Total taxids: " + str(len(all_filtered_taxids)))
+	print("Total raw interactions: " + str(len(interaction_array)))		
+	print("Interactions removed: " + str(interactions_removed))	
+	
+	print("Mapping OGs to " + str(len(protein_array)) + " proteins in " + str(len(interaction_filtered_array)) + " interactions. Proteins mapped:")
+	
 	protein_OG_maps = {} #Dictionary to save protein-OG mapping specific for this interaction set
 	mapped_count = 0
 	proteins_without_OG = 0
@@ -271,9 +322,9 @@ def build_meta(mapping_file_list):
 	print("\nWrote meta-interactome statistics to " + meta_stats_filename)
 	meta_stats_file.close()
 
-	return meta_network_filename
+	return [meta_network_filename, taxid_species]
 	
-def build_consensus(metafile, annotation_file_list): 
+def build_consensus(metafile, annotation_file_list, taxid_species): 
 	#Sets up the consensus meta-interactome network.
 	#This is identical to the meta-interactome but compresses interactions into their respective OGs.
 	#Interactors without OG assignment are retained and considered single-member OGs.
@@ -287,7 +338,6 @@ def build_consensus(metafile, annotation_file_list):
 	consensus_interactors = []	#Consensus interactome interactors - an OG where mapping is possible
 	all_interactions = []	#Meta-interactome interactions - unique by protein ID but contain OGs too.
 	consensus_interactions = []	#Consensus interactome interactions and associated data. Get written to output file.
-	taxid_species = {} #Dictionary to store taxids and their name and PARENT taxid.
 	all_annotations = [] #Annotations in file - a bit inefficient to load the whole thing but more searchable this way
 	consensus_annotations = {} #Dictionary to store functional category and descriptions of OG interactors.
 	
@@ -308,27 +358,15 @@ def build_consensus(metafile, annotation_file_list):
 			consensus_interactions.append([one_interaction[42], one_interaction[43]])
 		taxid_A = (((((one_interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
 		taxid_B = (((((one_interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
-		all_interactions.append([one_interaction[42], one_interaction[43], taxid_A, taxid_B])	#Get interactors AND taxid of source of both interactors
-	
-	#Get a list of all source taxids and convert to more generic versions from NCBI Taxonomy
-	#Need to do this as the same species may have multiple variants or taxids, e.g. "Escherichia coli" vs. "Escherichia coli K-12"
-	#We just want to know if an interaction applies to E. coli, for example
-	#Entrez from Bio package (Biopython) is used here
-	print("Listing interactor source taxids.")
-	all_taxids = []
-	for interaction in all_interactions:
-		for taxid in (interaction[2:4]):
-			if taxid not in all_taxids:
-				if taxid != "-":	#Why would we get this value anyway? Could be malformed entry as all interactions have taxids
-					all_taxids.append(taxid)
-	
-	#When comparing two entries, remember to compare both original and parent taxid.
-	for taxid in all_taxids:
-		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-		target_records = Entrez.read(target_handle)
-		taxid_name = target_records[0]["ScientificName"]
-		taxid_parent = target_records[0]["ParentTaxId"]
-		taxid_species[taxid] = [taxid_name, taxid_parent]
+		if taxid_A != taxid_B:	#If the two taxids aren't identical, they may still be related or may truly be cross-species.
+			#Cross-species PPI get removed.
+			taxid_mismatch = 1
+			if (taxid_species[taxid_A])[1] == (taxid_species[taxid_B])[1]: #Check if taxids share a parent
+				taxid_mismatch = 0
+			if (taxid_species[taxid_A])[1] == taxid_B or (taxid_species[taxid_B])[1] == taxid_A: #Check for parent-child relationship
+				taxid_mismatch = 0	
+		if taxid_mismatch != 1:
+			all_interactions.append([one_interaction[42], one_interaction[43], taxid_A, taxid_B])	#Get interactors AND taxid of source of both interactors
 			
 	#Second pass: count the number of interactions contributing to each consensus
 	#Compare taxids across interactions to see how many different sources interaction is seen for (i.e., X different species) 
@@ -343,6 +381,7 @@ def build_consensus(metafile, annotation_file_list):
 		for original_interaction in all_interactions:	#For each interaction in the set of all (not OG-compressed consensus) meta-interactome interactions...
 			if original_interaction[0] in interaction and original_interaction[1] in interaction: #If both interactors from the meta-interactome interaction are in the consensus interaction...
 				original_count = original_count +1	#Add to the count of this interaction across meta-interactome.
+				
 				for taxid in original_interaction[2:4]:	#For both taxids corresponding to the meta-interactome interaction...
 					if taxid not in interaction_sources and taxid != "-":	#If the taxid isn't in the source taxids for this interaction yet...and isn't empty...
 						if (taxid_species[taxid])[1] not in interaction_sources:	#Check to see if the sources contain the taxid's parent taxid (if so, it's redundant)
@@ -562,34 +601,48 @@ if len(annotation_file_list) <2:
 	get_eggnog_annotations()
 	annotation_file_list = glob.glob('*annotations.tsv')
 	
-#Check for protein interaction file and get if needed
-interaction_file_list = glob.glob('intact-bacteria.tab')
-if len(interaction_file_list) >1:
-	sys.exit("One protein interaction file at a time, please! Check for duplicates.")
-if len(interaction_file_list) == 0:
-	print("No protein interaction file found. Retrieving it.")
-	get_interactions()
-	interaction_file_list = glob.glob('intact-bacteria.tab')
-try:
-	interactionfile = open(interaction_file_list[0])
-except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	
+#Prompt for choice of protein interactions.
+#May provide manually or may download, but downloaded set may not be filtered properly.
+#Don't need to get interactions if we already have a meta-interactome.
+meta_file_list = glob.glob('*metainteractome*.txt')
+if len(meta_file_list) >1:
+	sys.exit("More than one meta-interactome found. Please use just one at a time.")
+if len(meta_file_list) == 0:
+	print("No meta-interactome found.")
+	ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file? Enter R for retrieval or L for local file.\n")
+	if ppi_data_option in ["R", "r"]:
+		ppi_data_filename = "protein-interactions.tab"
+		interaction_file_list = glob.glob(ppi_data_filename)
+		if len(interaction_file_list) >1:
+			sys.exit("One protein interaction file at a time, please! Check for duplicates.")
+		if len(interaction_file_list) == 0:
+			print("No protein interaction file found. Retrieving it.")
+			get_interactions()
+			interaction_file_list = glob.glob(ppi_data_filename)
+		try:
+			interactionfile = open(interaction_file_list[0])
+		except IOError as e:
+			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+	if ppi_data_option in ["L", "l"]:
+		ppi_data_filename = raw_input("Please provide local filename.\n")
+		interaction_file_list = glob.glob(ppi_data_filename)
+		if len(interaction_file_list) == 0:
+			sys.exit("Can't find a file with that filename.")	
+	else:
+		sys.exit("Not an option.")
+
 #Load meta-interactome network file
 #Needs to be built first.
-meta_file_list = glob.glob('*metainteractome*.txt')
 new_meta = 0
-if len(meta_file_list) >1:
-	sys.exit("One meta-interactome network at a time, please!")
 if len(meta_file_list) == 0:
-	print("No meta-interactome network file found.")
 	build_meta_network = raw_input("Build a new meta-interactome? Y/N ")
-	if build_meta_network == "Y":
-		new_meta_filename = build_meta(mapping_file_list)
+	if build_meta_network in ["Y", "y"]:
+		new_meta_result = build_meta(mapping_file_list, ppi_data_filename)
+		new_meta_filename = new_meta_result[0]
+		taxids_and_context = new_meta_result[1]
 		new_meta = 1
 	else:
 		sys.exit("Meta-network needed. Exiting.")
-
 try:
 	if new_meta == 1:
 		metafile = open(new_meta_filename)
@@ -608,7 +661,7 @@ if len(consensus_file_list) >1:
 if len(consensus_file_list) == 0:
 	print("No consensus network file found. Building one.")
 	description_file = open("bactNOG.annotations.tsv")
-	new_consensus_filename = build_consensus(metafile, annotation_file_list)
+	new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
 	new_consensus = 1
 try:
 	if new_consensus == 1:
