@@ -5,7 +5,7 @@ Uses eggNOG v.4.1.
 
 REQUIRES: 
 Biopython 1.65 or more recent
-Also needs ~500 MB of available disk space to accomodate data files amd output
+Also needs ~500 MB of available disk space to accomodate data files and output
 More space may be necessary for proteome files.
 
 INPUT: 
