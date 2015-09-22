@@ -593,13 +593,20 @@ def merge_data(list_of_filenames):
 		this_file = open(item)
 		line_count = 0
 		for line in this_file:
+			write_ok = 1
 			line_count = line_count +1
 			line_contents = ((line.rstrip()).split("\t"))
+			for interactor in line_contents[0:2]:
+				if interactor == "-":
+					print("Empty interactor in " + item + " in line " + str(line_count))
+					write_ok = 0
+					#Unmapped interactors might be denoted with a -. Don't add them.
 			if len(line_contents) != 42:
-				print("Format problem with " + item + " in line " + str(line_count))
+				print("Format problem in " + item + " line " + str(line_count))
+				write_ok = 0
 				#Just checking to see if the right number of columns are there
 				#Won't write problem lines to the merged file
-			else:
+			if write_ok == 1:
 				merged_file.write(line)
 		this_file.close()
 	return merged_file_name
@@ -632,7 +639,7 @@ if len(meta_file_list) >1:
 	sys.exit("More than one meta-interactome found. Please use just one at a time.")
 if len(meta_file_list) == 0:
 	print("No meta-interactome found.")
-	ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file? \n"
+	ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
 	"Enter:\n R for retrieval\n L for local file, or\n M for multiple inputs.\n")
 	if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
 		#May not include all PPI available through HTTP IntAct interface.
