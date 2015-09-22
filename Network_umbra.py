@@ -65,11 +65,13 @@ IN PROGRESS:
 *Are priorities
 
 *Offer the option to append PPI data sets together, as long as they are all in the proper format.
+	{{Add the primary Synechocystis and M. loti sets.}}
+	{{Generate consensus after this step - will use in subsequent steps if OK.}}
 *Filter by FuncCat and produce subsets.
 	For subsets, would like to know similar interactions at the protein level.
 	E.g., if an OG UF interacts with the same kinds of proteins, what proteins are they AND what else interacts with them in different species?
 Get counts and statistics for input data and various interactomes.
-Do interactome prediction for a given proteome.
+*Do interactome prediction for a given proteome. Download proteome on request.
 Use protein and species count from eggNOG (it's in the annotation file).
 Output interaction sets, filtered by FuncCat (and especially OG UFs).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
@@ -580,6 +582,27 @@ def get_OGs_from_network(these_interactions = []):
 				unique_OGs.append(OG)
 	return unique_OGs
 '''
+
+def merge_data(list_of_filenames):
+	
+	nowstring = (date.today()).isoformat()
+	merged_file_name = "interactions" + nowstring + ".txt"
+	merged_file = open(merged_file_name, "w")
+	
+	for item in list_of_filenames:
+		this_file = open(item)
+		line_count = 0
+		for line in this_file:
+			line_count = line_count +1
+			line_contents = ((line.rstrip()).split("\t"))
+			if len(line_contents) != 42:
+				print("Format problem with " + item + " in line " + str(line_count))
+				#Just checking to see if the right number of columns are there
+				#Won't write problem lines to the merged file
+			else:
+				merged_file.write(line)
+		this_file.close()
+	return merged_file_name
 	
 #Main
 
@@ -609,8 +632,10 @@ if len(meta_file_list) >1:
 	sys.exit("More than one meta-interactome found. Please use just one at a time.")
 if len(meta_file_list) == 0:
 	print("No meta-interactome found.")
-	ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file? Enter R for retrieval or L for local file.\n")
-	if ppi_data_option in ["R", "r"]:
+	ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file? \n"
+	"Enter:\n R for retrieval\n L for local file, or\n M for multiple inputs.\n")
+	if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
+		#May not include all PPI available through HTTP IntAct interface.
 		ppi_data_filename = "protein-interactions.tab"
 		interaction_file_list = glob.glob(ppi_data_filename)
 		if len(interaction_file_list) >1:
@@ -623,11 +648,32 @@ if len(meta_file_list) == 0:
 			interactionfile = open(interaction_file_list[0])
 		except IOError as e:
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	if ppi_data_option in ["L", "l"]:
+	if ppi_data_option in ["L", "l"]:	#Uses a local file, usually a downloaded IntAct PPI set, in PSI-MI Tab27 format
 		ppi_data_filename = raw_input("Please provide local filename.\n")
 		interaction_file_list = glob.glob(ppi_data_filename)
 		if len(interaction_file_list) == 0:
 			sys.exit("Can't find a file with that filename.")	
+	if ppi_data_option in ["M", "m"]:	#Uses multiple local files in PSI-MI Tab27 format
+		adding_files = 1
+		interaction_file_list = []
+		while adding_files:
+			ppi_data_filename = raw_input("Please provide local filename.\n")
+			files_present = glob.glob(ppi_data_filename)
+			if len(files_present) >0:
+				interaction_file_list.append(ppi_data_filename)	#Can be expanded easily later to do batch processing
+				print("Added " + ppi_data_filename + " to input list.")
+			else:
+				print("Can't find a file with that filename. Didn't add.")
+			ask_again = raw_input("Add another? Y/N\n")
+			if ask_again in ["N", "n"]:
+				adding_files = 0
+		print("Using the following inputs for the meta-interactome:\n")
+		if len(interaction_file_list) == 0:
+			sys.exit("Input list is empty. Exiting...")
+		for item in interaction_file_list:
+			print(item)
+		print("Merging into a single file.")
+		ppi_data_filename = merge_data(interaction_file_list)
 	else:
 		sys.exit("Not an option.")
 
