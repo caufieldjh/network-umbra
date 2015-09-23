@@ -66,13 +66,13 @@ Gets and maps FuncCat and description annotations (for both LUCA-level and bacte
 Provides the option to use a local file in lieu of a downloaded one (especially as PSIQUIC filtering may not provide what we want).
 Filters out any input interactions involving non-bacterial taxons (at the meta-interactome building step).
 Removes true cross-species interactions at the consensus network building step
+Can append input data sets into a single set of interactions. Checks for proper format.
 
 IN PROGRESS:
 *Are priorities
 
-*Offer the option to append PPI data sets together, as long as they are all in the proper format.
-	{{Add the primary Synechocystis and M. loti sets.}}
-	{{Generate consensus after this step - will use in subsequent steps if OK.}}
+*Handle interactors mapping to multiple OGs properly. Only really a problem with COGs.
+	Can keep both OG names but should still get FuncCats and annotations for both.
 *Filter by FuncCat and produce subsets.
 	For subsets, would like to know similar interactions at the protein level.
 	E.g., if an OG UF interacts with the same kinds of proteins, what proteins are they AND what else interacts with them in different species?
