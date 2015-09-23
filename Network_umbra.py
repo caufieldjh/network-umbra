@@ -20,8 +20,14 @@ OUTPUT:
 			Follows PSI-MI Tab27 format, with the addition of two ortholog identifiers per row.
 			See format description at https://code.google.com/p/psimi/wiki/PsimiTab27Format
 			
-'meta_statistcs[date].txt'
+'meta_statistics[date].txt'
 			Contains statistics relevant to the produced meta-interactome.
+
+'taxid_context[date].txt'
+			Contains NCBI taxonomy IDs, names, parent IDs, and domains for all input interactions.
+			All domains should be Bacteria.
+			Used as a reference if meta-interactome and consensus meta-interactome not
+			built during the same session.
 			
 'consensus[date].txt'
 			A consensus meta-interactome composed of all available bacterial protein-protein interactions.
@@ -195,7 +201,9 @@ def build_meta(mapping_file_list, ppi_data):
 	
 	nowstring = (date.today()).isoformat()
 	meta_network_filename = "metainteractome" + nowstring + ".txt"
+	taxid_context_filename = "taxid_context" + nowstring + ".txt"
 	meta_network_file = open(meta_network_filename, "w")
+	taxid_context_file = open(taxid_context_filename, "w")
 	
 	all_taxids = []
 	all_filtered_taxids = []	#Will remove non-bacterial taxids
@@ -243,13 +251,15 @@ def build_meta(mapping_file_list, ppi_data):
 		taxid_division = target_records[0]["Division"]
 		if taxid_division == "Bacteria":	#Restrict the set to bacteria!
 			taxid_species[taxid] = [taxid_name, taxid_parent, taxid_division]
+			taxid_context_file.write(str(taxid) + "\t" + "\t".join(taxid_species[taxid])+ "\n")
 			if taxid not in all_filtered_taxids:
 				all_filtered_taxids.append(taxid)
 				sys.stdout.write(".")
 				unique_taxid_count = unique_taxid_count +1
 				if unique_taxid_count % 100 == 0:
 					sys.stdout.write(str(unique_taxid_count))
-			#print(taxid_species[taxid])	
+			#print(taxid_species[taxid])
+	taxid_context_file.close()	
 	
 	print("\nCleaning up data by removing non-protein and non-bacterial interactors.")
 	interactions_removed = 0
@@ -716,7 +726,21 @@ if len(consensus_file_list) >1:
 if len(consensus_file_list) == 0:
 	print("No consensus network file found. Building one.")
 	description_file = open("bactNOG.annotations.tsv")
-	new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
+	if new_meta == 1:	#If we just build a meta-interactome we have taxid details already
+		new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
+	else:	#Otherwise we need to read taxid details from file - just rebuild dict from it
+		taxid_ref_list = glob.glob('taxid_context*.txt')
+		taxids_and_context = {}
+		if len(taxid_ref_list) >1:
+			sys.exit("Something went wrong - more than one taxid context file found.")
+		if len(taxid_ref_list) == 0:
+			sys.exit("Something went wrong - no taxid context file found.")
+		taxid_ref_file = open(taxid_ref_list[0])
+		for line in taxid_ref_file:
+			content = ((line.rstrip()).split("\t"))
+			taxids_and_context[content[0]] = [content[1], content[2], content[3]]
+		taxid_ref_file.close()
+		new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
 	new_consensus = 1
 try:
 	if new_consensus == 1:
