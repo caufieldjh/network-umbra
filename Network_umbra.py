@@ -199,7 +199,7 @@ def build_meta(mapping_file_list, ppi_data):
 	
 	all_taxids = []
 	all_filtered_taxids = []	#Will remove non-bacterial taxids
-	map_array = []
+	map_dict = {}	#Uniprot ID to OG dictionary for ALL IDs
 	interaction_file = open(ppi_data)
 	interaction_array = []
 	interaction_filtered_array = []
@@ -207,14 +207,15 @@ def build_meta(mapping_file_list, ppi_data):
 	taxid_species = {} #Dictionary to store taxids and their name and PARENT taxid.
 	
 	print("Building meta-interactome...")
-	print("Arraying map files.")
+	print("Setting up protein to OG maps.")
 	for input_map_file in mapping_file_list:
 		try:
 			map_file = open(input_map_file)
 		except IOError as e:
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
 		for line in map_file:
-			map_array.append((line.rstrip()).split("\t"))
+			one_map = ((line.rstrip()).split("\t"))
+			map_dict[one_map[0]] = one_map[1]
 		map_file.close()
 		
 	print("Arraying interaction file and creating lists of proteins and taxids.")
@@ -231,9 +232,10 @@ def build_meta(mapping_file_list, ppi_data):
 	interaction_file.close()
 	
 	
-	print("Finding details for interactor taxids.")
+	print("Finding details for interactor taxids. This will take some time.")
 	
 	for taxid in all_taxids:
+		unique_taxid_count = 0
 		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
 		target_records = Entrez.read(target_handle)
 		taxid_name = target_records[0]["ScientificName"]
@@ -244,6 +246,9 @@ def build_meta(mapping_file_list, ppi_data):
 			if taxid not in all_filtered_taxids:
 				all_filtered_taxids.append(taxid)
 				sys.stdout.write(".")
+				unique_taxid_count = unique_taxid_count +1
+				if unique_taxid_count % 100 == 0:
+					sys.stdout.write(str(unique_taxid_count))
 			#print(taxid_species[taxid])	
 	
 	print("\nCleaning up data by removing non-protein and non-bacterial interactors.")
@@ -277,34 +282,26 @@ def build_meta(mapping_file_list, ppi_data):
 	print("Total raw interactions: " + str(len(interaction_array)))		
 	print("Interactions removed: " + str(interactions_removed))	
 	
-	print("Mapping OGs to " + str(len(protein_array)) + " proteins in " + str(len(interaction_filtered_array)) + " interactions. Proteins mapped:")
+	print("Mapping OGs to " + str(len(protein_array)) + " proteins in " + str(len(interaction_filtered_array)) + " interactions.")
 	
 	protein_OG_maps = {} #Dictionary to save protein-OG mapping specific for this interaction set
 	mapped_count = 0
 	proteins_without_OG = 0
 	for protein in protein_array:
 		mapped_count = mapped_count +1
-		if mapped_count % 10 == 0:
-			sys.stdout.write(".")
-			if mapped_count % 100 == 0:
-				sys.stdout.write(str(mapped_count))
-		matching_OG = protein	#If the protein doesn't map to an OG it retains its original ID
-		for mapping in map_array:
-			if protein == mapping[0]:
-				matching_OG = mapping[1]
-				break
-		if matching_OG == protein:	#If there wasn't an OG match, count it as a protein without an OG
+		
+		if protein in map_dict:
+			matching_OG = map_dict[protein]
+		else:
+			matching_OG = protein	#If the protein doesn't map to an OG it retains its original ID
 			proteins_without_OG = proteins_without_OG +1
+			
 		protein_OG_maps[protein] = matching_OG
 	
 	print("\nWriting meta-interactome file. Interactions complete: ")
 	interaction_count = 0
-	for interaction in interaction_array:		#Write OGs for all interactions.
+	for interaction in interaction_filtered_array:		#Write OGs for all (filtered) interactions.
 		interaction_count = interaction_count +1
-		if interaction_count % 10 == 0:
-			sys.stdout.write(".")
-			if interaction_count % 100 == 0:
-				sys.stdout.write(str(interaction_count))
 				
 		for protein in interaction[0:2]:	#Get matching OGs for both proteins in the pair.
 			matching_OG = protein_OG_maps[protein.lstrip("uniprotkb:")]
@@ -364,6 +361,7 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 			consensus_interactions.append([one_interaction[42], one_interaction[43]])
 		taxid_A = (((((one_interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
 		taxid_B = (((((one_interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+		taxid_mismatch = 0	#Assume that the two taxids are the same by default
 		if taxid_A != taxid_B:	#If the two taxids aren't identical, they may still be related or may truly be cross-species.
 			#Cross-species PPI get removed.
 			taxid_mismatch = 1
