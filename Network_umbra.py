@@ -635,54 +635,54 @@ if len(annotation_file_list) <2:
 #May provide manually or may download, but downloaded set may not be filtered properly.
 #Don't need to get interactions if we already have a meta-interactome.
 meta_file_list = glob.glob('*metainteractome*.txt')
+ppi_data_filename = ""
 if len(meta_file_list) >1:
 	sys.exit("More than one meta-interactome found. Please use just one at a time.")
 if len(meta_file_list) == 0:
 	print("No meta-interactome found.")
-	ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
-	"Enter:\n R for retrieval\n L for local file, or\n M for multiple inputs.\n")
-	if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
-		#May not include all PPI available through HTTP IntAct interface.
-		ppi_data_filename = "protein-interactions.tab"
-		interaction_file_list = glob.glob(ppi_data_filename)
-		if len(interaction_file_list) >1:
-			sys.exit("One protein interaction file at a time, please! Check for duplicates.")
-		if len(interaction_file_list) == 0:
-			print("No protein interaction file found. Retrieving it.")
-			get_interactions()
+	while ppi_data_filename == "":
+		ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
+		"Enter:\n R for retrieval\n L for local file, or\n M for multiple inputs.\n")
+		if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
+			#May not include all PPI available through HTTP IntAct interface.
+			ppi_data_filename = "protein-interactions.tab"
 			interaction_file_list = glob.glob(ppi_data_filename)
-		try:
-			interactionfile = open(interaction_file_list[0])
-		except IOError as e:
-			print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	if ppi_data_option in ["L", "l"]:	#Uses a local file, usually a downloaded IntAct PPI set, in PSI-MI Tab27 format
-		ppi_data_filename = raw_input("Please provide local filename.\n")
-		interaction_file_list = glob.glob(ppi_data_filename)
-		if len(interaction_file_list) == 0:
-			sys.exit("Can't find a file with that filename.")	
-	if ppi_data_option in ["M", "m"]:	#Uses multiple local files in PSI-MI Tab27 format
-		adding_files = 1
-		interaction_file_list = []
-		while adding_files:
+			if len(interaction_file_list) >1:
+				sys.exit("One protein interaction file at a time, please! Check for duplicates.")
+			if len(interaction_file_list) == 0:
+				print("No protein interaction file found. Retrieving it.")
+				get_interactions()
+				interaction_file_list = glob.glob(ppi_data_filename)
+			try:
+				interactionfile = open(interaction_file_list[0])
+			except IOError as e:
+				print("I/O error({0}): {1}".format(e.errno, e.strerror))
+		if ppi_data_option in ["L", "l"]:	#Uses a local file, usually a downloaded IntAct PPI set, in PSI-MI Tab27 format
 			ppi_data_filename = raw_input("Please provide local filename.\n")
-			files_present = glob.glob(ppi_data_filename)
-			if len(files_present) >0:
-				interaction_file_list.append(ppi_data_filename)	#Can be expanded easily later to do batch processing
-				print("Added " + ppi_data_filename + " to input list.")
-			else:
-				print("Can't find a file with that filename. Didn't add.")
-			ask_again = raw_input("Add another? Y/N\n")
-			if ask_again in ["N", "n"]:
-				adding_files = 0
-		print("Using the following inputs for the meta-interactome:\n")
-		if len(interaction_file_list) == 0:
-			sys.exit("Input list is empty. Exiting...")
-		for item in interaction_file_list:
-			print(item)
-		print("Merging into a single file.")
-		ppi_data_filename = merge_data(interaction_file_list)
-	else:
-		sys.exit("Not an option.")
+			interaction_file_list = glob.glob(ppi_data_filename)
+			if len(interaction_file_list) == 0:
+				sys.exit("Can't find a file with that filename.")	
+		if ppi_data_option in ["M", "m"]:	#Uses multiple local files in PSI-MI Tab27 format
+			adding_files = 1
+			interaction_file_list = []
+			while adding_files:
+				ppi_data_filename = raw_input("Please provide local filename.\n")
+				files_present = glob.glob(ppi_data_filename)
+				if len(files_present) >0:
+					interaction_file_list.append(ppi_data_filename)	#Can be expanded easily later to do batch processing
+					print("Added " + ppi_data_filename + " to input list.")
+				else:
+					print("Can't find a file with that filename. Didn't add.")
+				ask_again = raw_input("Add another? Y/N\n")
+				if ask_again in ["N", "n"]:
+					adding_files = 0
+			print("Using the following inputs for the meta-interactome:\n")
+			if len(interaction_file_list) == 0:
+				sys.exit("Input list is empty. Exiting...")
+			for item in interaction_file_list:
+				print(item)
+			print("Merging into a single file.")
+			ppi_data_filename = merge_data(interaction_file_list)
 
 #Load meta-interactome network file
 #Needs to be built first.
