@@ -252,19 +252,23 @@ def build_meta(mapping_file_list, ppi_data):
 		interaction_ok = 1
 		for taxid in [interaction[9], interaction[10]]:
 			taxid = (((((taxid.split("|"))[0]).lstrip("taxid:")).split("("))[0])
-			if taxid not in all_filtered_taxids:
+			if taxid not in all_filtered_taxids:	#This is where the non-bacterial interactions get removed
 				interaction_ok = 0	#Ensure the interaction won't be kept later
 				break				#Ignore this interactor and the other in the pair
-		if interaction_ok == 1:
+		if interaction_ok == 1:	#Don't bother to filter proteins if this didn't pass the first filter
 			for protein in interaction[0:2]:			#both proteins in the interacting pair
-				if protein[0:6] == "intact" or protein[0:5] == "chebi":	#If the interactor isn't a single protein...
+				if protein[0:9] != "uniprotkb":	#Only keep proteins with uniprot IDs
+					#Might be nice to keep other protein IDs too but they're rare
 					interaction_ok = 0	#Ensure the interaction won't be kept later
 					break				#Ignore this interactor and the other in the pair
 				this_protein = protein.lstrip("uniprotkb:")
 				if this_protein not in protein_array:
 					protein_array.append(this_protein)
-			if interaction not in interaction_filtered_array:
-				interaction_filtered_array.append(interaction)
+			if interaction_ok == 1:	# The last filter check for cleaning
+				if interaction not in interaction_filtered_array:
+					interaction_filtered_array.append(interaction)
+			else:
+				interactions_removed = interactions_removed +1
 		else:
 			interactions_removed = interactions_removed +1
 				
