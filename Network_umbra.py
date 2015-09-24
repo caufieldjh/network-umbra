@@ -67,12 +67,15 @@ Provides the option to use a local file in lieu of a downloaded one (especially 
 Filters out any input interactions involving non-bacterial taxons (at the meta-interactome building step).
 Removes true cross-species interactions at the consensus network building step
 Can append input data sets into a single set of interactions. Checks for proper format.
+Multiple-OG interactors are handled as single unique OGs in the consensus set and receive annotations.
 
 IN PROGRESS:
 *Are priorities
 
-*Handle interactors mapping to multiple OGs properly. Only really a problem with COGs.
-	Can keep both OG names but should still get FuncCats and annotations for both.
+*Something is still wrong with the consensus network - e.g. counting interactions as being in multiple species when just one interactor is in the species, like:
+Q98AB6	ENOG410XNMH	63	8	190650 246197 192222 224308 208964 243274 1140 266835	NA	NA	T	Histidine kinase
+InteractorA is only in M. loti and the OG is in multiple species, but this interaction only happens once in the meta-interactome and only in M. loti.
+
 *Filter by FuncCat and produce subsets.
 	For subsets, would like to know similar interactions at the protein level.
 	E.g., if an OG UF interacts with the same kinds of proteins, what proteins are they AND what else interacts with them in different species?
@@ -360,10 +363,10 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	for line in metafile:
 		one_interaction = ((line.rstrip()).split("\t"))
 		new_interaction = 0
-		if one_interaction[42] not in consensus_interactors:	#Interactor A
+		if one_interaction[42] not in consensus_interactors:	#Interactor A's OG or ID if no OG mapped
 			consensus_interactors.append(one_interaction[42])
 			new_interaction = 1
-		if one_interaction[43] not in consensus_interactors:	#Interactor B	
+		if one_interaction[43] not in consensus_interactors:	#Interactor B's OG or ID if no OG mapped	
 			consensus_interactors.append(one_interaction[43])
 			new_interaction = 1
 		if new_interaction == 1:
@@ -433,16 +436,43 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 			all_annotations.append((line.rstrip()).split("\t"))
 		ann_file.close()
 	
+	multiple_og_count = 0	#The count of interactors mapping to >1 OG. Are treated as single OGs as this may be biologically meaningful
 	for interactor in consensus_interactors:
 		consensus_annotations[interactor] = ["NA", "NA"] #Should only happen if OG not in description file (e.g. if it's unmapped to an OG)
-		for annotation in all_annotations:
-			if interactor == annotation[1]:
-				consensus_annotations[interactor] = [annotation[4], annotation[5]] #FuncCat and description
-				break
+		if "," in interactor:	#Meaning it maps to multiple OGs, so we need to annotate all of them
+			#print(interactor)
+			this_mult_og_count = 0	#Keeps track of multiple OG sets. Usually just two or three different OGs at most.
+			consensus_annotations[interactor] = ["", ""]
+			multiple_og_count = multiple_og_count +1
+			multiple_ogs = interactor.split(",")
+			for og in multiple_ogs:
+				this_mult_og_count = this_mult_og_count +1
+				for annotation in all_annotations:
+					if og == annotation[1]:
+						#Concatenate each FuncCat, separated by |
+						(consensus_annotations[interactor])[0] = (consensus_annotations[interactor])[0] + annotation[4]
+						if this_mult_og_count != len(multiple_ogs):
+							(consensus_annotations[interactor])[0] = (consensus_annotations[interactor])[0] + "|"
+						#Concatenate each description, separated by |
+						(consensus_annotations[interactor])[1] = (consensus_annotations[interactor])[1] + annotation[5]
+						if this_mult_og_count != len(multiple_ogs):
+							(consensus_annotations[interactor])[1] = (consensus_annotations[interactor])[1] + "|"
+						break
+		else:
+			for annotation in all_annotations:
+				if interactor == annotation[1]:
+					consensus_annotations[interactor] = [annotation[4], annotation[5]] #FuncCat and description
+					break
 	for interaction in consensus_interactions:
 		for interactor in interaction[0:2]:
 			interaction.append("\t".join(consensus_annotations[interactor]))
-				
+	
+	print("Consensus meta-interactome involves " + str(len(consensus_interactors)) +
+			" interactors and " + str(cons_interaction_count) + " interactions.")
+	print("It involves " + str(len(all_consensus_taxids)) + " unique taxids, " +
+			"though some may be closely related.")
+	print(str(multiple_og_count) + " interactors map to more than one OG.")
+	
 	print("Writing consensus meta-interactome file.")
 	for interaction in consensus_interactions:
 		consensus_network_file.write("\t".join(interaction) + "\n")
