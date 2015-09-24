@@ -92,6 +92,7 @@ Download a proteome with a search query and set up OG mapping for it.
 
 import glob, gzip, os, re, sys, urllib2, zipfile
 from Bio import Entrez
+from collections import Counter
 from datetime import date
 
 Entrez.email = 'caufieldjh@vcu.edu'
@@ -357,8 +358,8 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	all_annotations = [] #Annotations in file - a bit inefficient to load the whole thing but more searchable this way
 	consensus_annotations = {} #Dictionary to store functional category and descriptions of OG interactors.
 	
-	#First pass: create a list of unique interactions only, using OG IDs
-	print("Finding unique interactions.")
+	#First pass: create a list of unique interactors and interactions, using OG IDs
+	print("Finding unique interactors and interactions.")
 	cons_interaction_count = 0
 	for line in metafile:
 		one_interaction = ((line.rstrip()).split("\t"))
@@ -389,16 +390,33 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	#Compare taxids across interactions to see how many different sources interaction is seen for (i.e., X different species) 
 	#Add counts to each item in consensus_interactions
 	#The first count is the total occurence of the given interaction across the full meta-interactome
-	print("Counting interaction contributions.")
+	
+	#The counts aren't correct right now for total interactions or species count.
+	#I think the script is treating the counts as a sum of occurences of either interactor
+	#rather than a sum or occurences of BOTH interactors
+	#It looks like it's because one of the if statements isn't explicit about set membership
+	#So self-interactions are the problem (searching B vs. B will still match A vs. B)
+	
+	print("Counting interaction contributions. This may take a while...")
 	all_consensus_taxids = []
+	con_interactions_checked = 0
+	print(str(len(consensus_interactions)))
 	for interaction in consensus_interactions:
+		sys.stdout.write(".")
+		con_interactions_checked = con_interactions_checked +1
+		if con_interactions_checked % 100 == 0:
+			sys.stdout.write(str(con_interactions_checked))
 		interaction_sources = []	#The list of taxids found to correspond to this interaction.
 		original_count = 0
+		interaction_counter = Counter(interaction)
+		#Using Counters as we may need to compare lists with duplicates (i.e., when there's a self-interaction)
+		#It's pretty slow, though - is there a better way?
 		#This gets a bit complicated.
 		for original_interaction in all_interactions:	#For each interaction in the set of all (not OG-compressed consensus) meta-interactome interactions...
-			if original_interaction[0] in interaction and original_interaction[1] in interaction: #If both interactors from the meta-interactome interaction are in the consensus interaction...
-				original_count = original_count +1	#Add to the count of this interaction across meta-interactome.
-				
+			original_interaction_counter = Counter(original_interaction[0:2])
+			difference = original_interaction_counter - interaction_counter
+			if len(list(difference.elements())) == 0:	#If both interactors from the meta-interactome interaction are in the consensus interaction...
+				original_count = original_count +1	#Add to the count of this interaction across the meta-interactome.
 				for taxid in original_interaction[2:4]:	#For both taxids corresponding to the meta-interactome interaction...
 					if taxid not in interaction_sources and taxid != "-":	#If the taxid isn't in the source taxids for this interaction yet...and isn't empty...
 						if (taxid_species[taxid])[1] not in interaction_sources:	#Check to see if the sources contain the taxid's parent taxid (if so, it's redundant)
