@@ -46,10 +46,14 @@ DescB		Description of the second interactor
 
 'cons_statistics[date].txt'
 			Contains statistics relevant to the produced consensus meta-interactome.
+			
+'subgraph_expansion_[FuncCat]_[date].txt'
+			A set of subgraphs of the consensus meta-interactome, filtered by conservation of interactions and function of interactors.
+			Each line is one interaction between a consensus interactor and a unique protein, accompanied by the source taxid of the unique protein.
+			
+'subgraph_expansion_[FuncCat]_nodes_[date].txt'
+			Annotation file for the nodes in the expanded subgraphs.
 
-At the moment, this only makes predictions based off presence of the same OGs as in the consensus network.
-It needs to verify that both OGs in the predicted PPI are present in the target species.
-Redundant predictions (the same interaction from the same taxon ID) are merged.
 
 Uses PSIQUIC service to retrieve IntAct data - see https://github.com/micommunity/psicquic
 
@@ -69,13 +73,11 @@ Removes true cross-species interactions at the consensus network building step
 Can append input data sets into a single set of interactions. Checks for proper format.
 Multiple-OG interactors are handled as single unique OGs in the consensus set and receive annotations.
 Verified that self-interactions aren't counted incorrectly.
+Subgraph expansion and filtering module is complete.
 
 IN PROGRESS:
 *Are priorities
 
-*Filter by FuncCat and produce subsets.
-	For subsets, would like to know similar interactions at the protein level.
-	E.g., if an OG UF interacts with the same kinds of proteins, what proteins are they AND what else interacts with them in different species?
 Get counts and statistics for input data and various interactomes.
 *Do interactome prediction for a given proteome. Download proteome on request.
 Use protein and species count from eggNOG (it's in the annotation file).
@@ -662,6 +664,169 @@ def merge_data(list_of_filenames):
 		this_file.close()
 	return merged_file_name
 	
+def subset_expansion(metafile, consensusfile):
+	print("\nSubset expansion will filter consensus interactions by functional category" +
+			 " and by conservation across taxonomic groups.\n" +
+			 "It will produce a set of subgraphs, where each graph involves a consensus" +
+			 " interactor and ALL of its interactions in the meta-interactome.\n" +
+			 "These graphs will contain taxonomy annotations for each interaction" +
+			 " and can be split in network analysis software, e.g. Cytoscape.\n")
+	print("Functional categories:\n" 
+			"INFORMATION STORAGE AND PROCESSING\n"
+			"[J] Translation, ribosomal structure and biogenesis\n" 
+			"[A] RNA processing and modification\n" 
+			"[K] Transcription\n"
+			"[L] Replication, recombination and repair\n" 
+			"[B] Chromatin structure and dynamics\n"
+			"CELLULAR PROCESSES AND SIGNALING\n"
+			"[D] Cell cycle control, cell division, chromosome partitioning\n" 
+			"[Y] Nuclear structure\n"
+			"[V] Defense mechanisms\n"
+			"[T] Signal transduction mechanisms\n"
+			"[M] Cell wall/membrane/envelope biogenesis\n" 
+			"[N] Cell motility\n" 
+			"[Z] Cytoskeleton\n"
+			"[W] Extracellular structures\n"
+			"[U] Intracellular trafficking, secretion, and vesicular transport\n" 
+			"[O] Posttranslational modification, protein turnover, chaperones\n" 
+			"METABOLISM\n"
+			"[C] Energy production and conversion\n"
+			"[G] Carbohydrate transport and metabolism\n" 
+			"[E] Amino acid transport and metabolism\n"
+			"[F] Nucleotide transport and metabolism\n" 
+			"[H] Coenzyme transport and metabolism\n" 
+			"[I] Lipid transport and metabolism\n"
+			"[P] Inorganic ion transport and metabolism\n"
+			"[Q] Secondary metabolites biosynthesis, transport and catabolism\n" 
+			"POORLY CHARACTERIZED\n"
+			"[R] General function prediction only\n"
+			"[S] Function unknown\n")
+			
+	func_filter = raw_input("Filter interactors for which functional category? (Type X for interactors of unknown function.)\n")
+	search_unknowns = 0
+	if func_filter in ["x", "X"]:
+		search_unknowns = 1
+		print("Filtering for interactors of unknown function. Interactors marked NA will not be included.")
+	
+	consensus_interactions = []	#Contains whole line (one interaction) from consensus
+	consensus_interactions_filtered = [] #Interactions filtered by FuncCat
+	consensus_interactions_taxfilt = []	#Interactions filtered by FuncCat and taxids
+	consensus_interactors_filtered = {}	#Contains interactor, FuncCat, and description (filtered by FuncCat)
+	consensus_interactors_taxfilt = {}	#Contains interactor, FuncCat, and description (filtered by FuncCat and 
+										#by participation in an interaction passing the taxid filter)
+	expanded_interactions = {}			#Keys are consensus interactors. Values are all unique proteins (and sources) they interact with.
+										#Actually a dict of lists of lists. Fun.
+	max_taxon_range = 1	#The greatest count of different taxids per interaction, across the whole consensus
+	all_interactions = []	#All interactions in the meta-interactome
+	protein_annotations = {}	#Annotations (from IntAct) for unique proteins. No FuncCats here.
+	
+	print("Filtering consensus interactors by function.")
+	for line in consensusfile:	#Filter interactors by FuncCat
+		one_consensus_interaction = ((line.rstrip()).split("\t"))
+		consensus_interactions.append(one_consensus_interaction)
+		
+		if one_consensus_interaction[5] != "NA":	#For interactor A
+			if search_unknowns == 1:
+				if "R" in one_consensus_interaction[5] or "S" in one_consensus_interaction[5]:
+					consensus_interactors_filtered[one_consensus_interaction[0]] = [one_consensus_interaction[5], one_consensus_interaction[6]]
+			else:
+				if func_filter in one_consensus_interaction[5]:
+					consensus_interactors_filtered[one_consensus_interaction[0]] = [one_consensus_interaction[5], one_consensus_interaction[6]]
+		if one_consensus_interaction[7] != "NA":	#For interactor B
+			if search_unknowns == 1:
+				if "R" in one_consensus_interaction[7] or "S" in one_consensus_interaction[7]:
+					consensus_interactors_filtered[one_consensus_interaction[1]] = [one_consensus_interaction[7], one_consensus_interaction[8]]
+			else:
+				if func_filter in one_consensus_interaction[7]:
+					consensus_interactors_filtered[one_consensus_interaction[1]] = [one_consensus_interaction[7], one_consensus_interaction[8]]
+					
+	consensusfile.close()	#May not want to close file if we plan on doing multiple filters during same session.
+	
+	for interaction in consensus_interactions:
+		if interaction[0] in consensus_interactors_filtered or interaction[1] in consensus_interactors_filtered:
+			consensus_interactions_filtered.append(interaction)
+			if interaction[3] > max_taxon_range:
+				max_taxon_range = interaction[3]
+		
+	print("The maximum for this filter will be " + str(max_taxon_range) + " different taxids.")
+	tax_filter = raw_input("Select for at least how many different taxonomic groups?\n")
+	
+	for interaction in consensus_interactions_filtered:
+		if interaction[3] >= tax_filter:
+			consensus_interactions_taxfilt.append(interaction)
+			
+			if interaction[5] != "NA":	#For interactor A
+				if search_unknowns == 1:
+					if "R" in interaction[5] or "S" in interaction[5]:
+						consensus_interactors_taxfilt[interaction[0]] = [interaction[5], interaction[6]]
+				else:
+					if func_filter in interaction[5]:
+						consensus_interactors_taxfilt[interaction[0]] = [interaction[5], interaction[6]]
+			if interaction[7] != "NA":	#For interactor B
+				if search_unknowns == 1:
+					if "R" in interaction[7] or "S" in interaction[7]:
+						consensus_interactors_taxfilt[interaction[1]] = [interaction[7], interaction[8]]
+				else:
+					if func_filter in interaction[7]:
+						consensus_interactors_taxfilt[interaction[1]] = [interaction[7], interaction[8]]
+	
+	print("Generated list of filtered consensus interactors. Searching meta-interactome.")
+	
+	for line in metafile:	#Set up the meta-interactome file first
+		one_interaction = (line.rstrip()).split("\t")
+		all_interactions.append(one_interaction)	#This is just the raw interaction list at this point
+	
+	metafile.close()
+		
+	for interactor in consensus_interactors_taxfilt:
+		expanded_interactions[interactor] = []
+		for interaction in all_interactions:	#Search meta-interactome for matching interactions; return unique all proteins and corresponding organisms
+			if interaction[42] == interactor:
+				taxid = (((((interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+				protein = interaction[1].lstrip("uniprotkb:")
+				if protein not in protein_annotations:
+					protein_annotations[protein] = interaction[23]
+				protein_and_source = [protein, taxid]
+				(expanded_interactions[interactor]).append(protein_and_source)
+			if interaction[43] == interactor:
+				if interaction[0] != interaction[1]:	#Avoid adding self-interactions twice.
+					taxid = (((((interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+					protein = interaction[0].lstrip("uniprotkb:")
+					if protein not in protein_annotations:
+						protein_annotations[protein] = interaction[22]
+					protein_and_source = [protein, taxid]
+					(expanded_interactions[interactor]).append(protein_and_source)
+	
+	nowstring = (date.today()).isoformat()
+	subgraph_file_name = "subgraph_expansion_" + func_filter + "_" + nowstring + ".txt"
+	subgraph_node_file_name = "subgraph_expansion_" + func_filter + "_nodes_" + nowstring + ".txt"
+	subgraph_file = open(subgraph_file_name, "w")
+	subgraph_node_file = open(subgraph_node_file_name, "w")
+	
+	#print(consensus_interactors_taxfilt)	
+	#print(expanded_interactions)
+	
+	print("Writing subgraph expansion file and node annotation file.")
+	for consensus_interactor in expanded_interactions:
+		for interaction in expanded_interactions[consensus_interactor]:
+			#print(consensus_interactor + "\t" + "\t".join(interaction))
+			subgraph_file.write(consensus_interactor + "\t" + "\t".join(interaction) + "\n")
+	
+	#Protein annotations are kind of a mess but that's because the interaction data table combines interactor annotations into single columns.
+	#It's also difficult to know what kind of annotation to expect. 
+	#All are included here, for now.
+	
+	for interactor in consensus_interactors_taxfilt:
+		subgraph_node_file.write(interactor + "\t" + "\t".join(consensus_interactors_taxfilt[interactor]) + "\n")
+	for protein in protein_annotations:
+		subgraph_node_file.write(protein + "\t-\t" + protein_annotations[protein] + "\n")
+		
+	print("Done.")
+	
+	
+def predict_interactome():
+	print("Interactome prediction under construction.")
+	
 #Main
 
 #Check for eggNOG mapping file and get if needed
@@ -795,15 +960,15 @@ requested = 0
 while requested == 0:
 	print("\n------------------------------------------------------------")
 	request_next = raw_input("Choose from the following options.\n" 
-		"A: Generate a subset of the consensus network.\n"
+		"A: Generate expanded subgraphs of the consensus network, filtering by function.\n"
 		"B: Generate a predicted interactome for one or more proteomes.\n"
 		"X: Exit.\n") 
 	if request_next in ["x", "X"]:
 		sys.exit("Exiting...")
 	if request_next in ["a", "A"]:
-		print("Option under construction.")
+		subset_expansion(metafile, consensusfile)
 	if request_next in ["b", "B"]:
-		print("Option under construction.")
+		predict_interactome()
 	print("Choose from the list, please.")
 
 '''	
