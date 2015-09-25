@@ -309,7 +309,7 @@ def build_meta(mapping_file_list, ppi_data):
 			
 		protein_OG_maps[protein] = matching_OG
 	
-	print("\nWriting meta-interactome file. Interactions complete: ")
+	print("\nWriting meta-interactome file.")
 	interaction_count = 0
 	for interaction in interaction_filtered_array:		#Write OGs for all (filtered) interactions.
 		interaction_count = interaction_count +1
@@ -395,8 +395,9 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	all_consensus_taxids = []
 	con_interactions_checked = 0
 	for interaction in consensus_interactions:
-		sys.stdout.write(".")
 		con_interactions_checked = con_interactions_checked +1
+		if con_interactions_checked % 10 == 0:
+			sys.stdout.write(".")
 		if con_interactions_checked % 100 == 0:
 			sys.stdout.write(str(con_interactions_checked))
 		interaction_sources = []	#The list of taxids found to correspond to this interaction.
@@ -434,7 +435,7 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		interaction.append(" ".join(interaction_sources))
 	
 	#Third pass: get the functional categories and descriptions of all interactors
-	print("Adding interactor annotations.")
+	print("\nAdding interactor annotations.")
 	for input_ann_file in annotation_file_list:
 		try:
 			ann_file = open(input_ann_file)
