@@ -89,8 +89,9 @@ Perform ANOVA between different FuncCats to see consensus interaction patterns.
 Download a proteome with a search query and set up OG mapping for it.
 '''
 
-import glob, gzip, os, re, sys, urllib2, zipfile
+import glob, gzip, os, re, requests, sys, urllib2, zipfile
 from Bio import Entrez
+from bs4 import BeautifulSoup
 from collections import Counter
 from datetime import date
 
@@ -823,10 +824,151 @@ def subset_expansion(metafile, consensusfile):
 		
 	print("Done.")
 	
+def predict_interactome(mapping_file_list, metafile, consensusfile):
+	cwd = os.getcwd()
+	storage_path = "proteomes"
+	if not os.path.isdir(storage_path):
+		try: 
+			os.mkdir(storage_path)
+			print("Setting up proteome directory.")
+		except OSError:
+			if not os.path.isdir(storage_path):
+				raise
 	
-def predict_interactome():
-	print("Interactome prediction under construction.")
+	getting_proteomes = 1
+	while getting_proteomes == 1:
+		get_new_proteomes = raw_input("Get a proteome from Uniprot? (Y/N)\n")
+		if get_new_proteomes in ["Y", "y"]:
+			get_a_proteome()
+		else:
+			print("Will now map proteomes to OGs.")
+			break
 	
+	proteome_list = glob.glob('proteomes\proteome_raw_*.txt')	#Raw proteomes, from Uniprot, in list format, labeled with taxid
+	
+	map_dict = {}	#Dictionary for Uniprot to OG maps
+	
+	if len(proteome_list) > 0:	#Only need the OG map if we have raw proteomes to be processed
+		print("Setting up protein to OG maps.")
+		for input_map_file in mapping_file_list:
+			try:
+				map_file = open(input_map_file)
+			except IOError as e:
+				print("I/O error({0}): {1}".format(e.errno, e.strerror))
+			for line in map_file:
+				one_map = ((line.rstrip()).split("\t"))
+				map_dict[one_map[0]] = one_map[1]
+			map_file.close()
+	
+	for proteome_filename in proteome_list:					#Map all available raw proteomes to OGs.
+		#Proteins without OG mappings retain their Uniprot IDs but we keep track of it in an extra column, too
+		print("Mapping proteins in " + proteome_filename)
+		proteome_proteins = []
+		proteome_map_filename = proteome_filename.replace("raw", "map")
+		try:
+			proteome_file = open(proteome_filename)
+			proteome_map_file = open(proteome_map_filename, "w")
+		except IOError as e:
+			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+		for line in proteome_file:
+			one_protein = line.rstrip()
+			proteome_proteins.append(one_protein)
+		for protein in proteome_proteins:
+			og_mapped = 0	#All proteins are unmapped to OGs by default
+			if protein in map_dict:
+				og_mapped = 1
+				proteome_map_file.write(map_dict[protein] + "\t" + protein + "\t" + str(og_mapped) + "\n")
+			else:
+				proteome_map_file.write(protein + "\t" + protein + "\t" + str(og_mapped) + "\n")
+			
+	proteome_map_list = glob.glob('proteomes\proteome_map_*.txt')	#Proteomes mapped to eggNOG OGs, labeled with taxid
+	#Uses Entrez here for more info about taxid corresponding to proteome.
+	print("\nAvailable proteome maps:")
+	for proteome_filename in proteome_map_list:
+		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
+		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+		target_records = Entrez.read(target_handle)
+		taxid_name = target_records[0]["ScientificName"]
+		taxid_division = target_records[0]["Division"]
+		if taxid_division != "Bacteria":
+			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
+		else:
+			print(taxid_name + "\t\t" + proteome_filename)
+			
+	print("\n")
+	
+def get_a_proteome():
+	
+	def get_search_url(query, fil):
+		search_url = "http://www.uniprot.org/proteomes/?query=" + query + \
+					"&fil=" + fil + "&sort=score"
+		return search_url
+	
+	def parse_search(up_input):
+		search_results = []
+		soup = BeautifulSoup(up_input)
+		for child in (soup.find_all('tr')):
+			single_result = child.get_text("\t")
+			search_results.append(single_result)
+		del search_results[0:2]
+		if len(search_results) == 0:
+			print("No results found.")
+			return None
+		return search_results
+	
+	def get_proteome_url(entry, format_choice):
+		proteome_url = "http://www.uniprot.org/uniprot/?sort=&desc=&query=proteome:" + entry + "&force=no&format=" + format_choice
+		return proteome_url
+		
+	def parse_proteome_entry(up_input):
+		soup = BeautifulSoup(up_input)
+		entry_text = (soup.p.get_text())
+		return entry_text
+		
+	def save_proteome(text,taxid):
+		os.chdir("proteomes")
+		filename = "proteome_raw_" + str(taxid) + ".txt"
+		try:
+			outfile = open(filename, 'wb')
+		except IOError as e:
+			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+			sys.exit()
+		for line in text:
+			outfile.write(line)
+		print("File written to " + filename)
+		outfile.close()
+		os.chdir("..")
+
+	#Retrieve proteomes on a query
+	query = (raw_input("Please specify a full or partial species name.\n")).rstrip()
+	search_results_url = get_search_url(query, "reference%3Ayes") #Leave filter as "" to get non-reference proteomes too
+								#Other option: taxonomy%3A"Bacteria+%5B2%5D" for just bacteria
+	search_response = requests.get(search_results_url)
+	
+	#Output the query results
+	print(search_response)
+	proteome_entries = parse_search(search_response.text)
+	if proteome_entries == None:
+		return None
+	i = 0
+	print("Result\tAccession\tName")
+	for entry in proteome_entries:
+		print(str(i) + "\t" + entry)
+		i = i +1
+	
+	#Choose a single proteome and output to file
+	choice = raw_input('Please choose a search result.\n')
+	if not re.match("^[0-9]*$", choice):
+		print("Numbers only, please.")
+		sys.exit()
+	chosen_entry = (proteome_entries[int(choice)]).split("\t")
+	print("Retrieving proteome for " + chosen_entry[1])
+	proteome_url = get_proteome_url(chosen_entry[0], "list") #Options include list, txt, tab
+	proteome_response = requests.get(proteome_url)
+	proteome_text = parse_proteome_entry(proteome_response.text)
+	save_proteome(proteome_text, chosen_entry[2])
+	
+			
 #Main
 
 #Check for eggNOG mapping file and get if needed
@@ -968,7 +1110,7 @@ while requested == 0:
 	if request_next in ["a", "A"]:
 		subset_expansion(metafile, consensusfile)
 	if request_next in ["b", "B"]:
-		predict_interactome()
+		predict_interactome(mapping_file_list, metafile, consensusfile)
 	print("Choose from the list, please.")
 
 '''	
