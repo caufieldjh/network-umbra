@@ -503,140 +503,6 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	
 	return consensus_network_filename
 	
-'''
-def network_analyze(target, target_taxid):	#Not updated yet, just cannibalizing code
-	#Store target proteins and OGs
-	target_loci = [] #Both OG and corresponding unique locus
-	target_ogs = [] #Each OG will be unique in this list
-	target_proteins = [] #Each locus, really
-	proteins_are_na = 0
-	for line in target:
-		og_and_prot = re.split(r'\t+', line.rstrip('\t\n'))					
-		target_loci.append(og_and_prot)
-		if og_and_prot[0] == "NA":
-			proteins_are_na = proteins_are_na + 1
-		if og_and_prot[0] not in target_ogs:
-			target_ogs.append(og_and_prot[0])
-		target_proteins.append(og_and_prot)
-	[target_name, target_lineage, parent_taxid] = get_lineage(target_taxid)
-	activefile_name = "Predicted_interactions_" + str(target_taxid) + ".txt"
-	try:
-		activefile = open(activefile_name, 'w')
-	except IOError as e:
-		print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	noninteracting_file_name = "Noninteracting_OGs_" + str(target_taxid) + ".txt"
-	try: 
-		noninteracting_file = open(noninteracting_file_name, 'w')
-	except IOError as e:
-		print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	#Set up predicted interaction network and search for presence of interactors
-	predicted_net = []
-	match_count = 0
-	for og in target_ogs:
-		for ppi in consensusPPI:
-			if og == ppi[0] and ppi[3] in target_ogs:
-				predicted_net.append(ppi)
-				match_count = match_count +1
-	#Remove duplicate predictions per species
-	predicted_net_unique = []
-	predicted_net_unique_alltaxid = []
-	predicted_OG_coverage = []
-	predicted_OG_coverage_unique = []
-	OG_i = []				#All unique OG-OG interactions in the predicted network
-	experimental_OG_i = [] #unique OG-OG interactions specific to this and parental taxids
-	experimental_OG_i_unique = []
-	for ppi in predicted_net:
-	    if ppi not in predicted_net_unique:
-	        predicted_net_unique.append(ppi)
-		this_prediction = [ppi[0], ppi[2]]
-		if this_prediction not in predicted_net_unique_alltaxid:
-			predicted_net_unique_alltaxid.append(this_prediction)
-	predicted_net = predicted_net_unique
-	predicted_OG_coverage = [x for y in predicted_net_unique_alltaxid for x in y]
-	for og in predicted_OG_coverage:
-		if og not in predicted_OG_coverage_unique:
-			predicted_OG_coverage_unique.append(og)
-	#Send to output and classify each interaction as experimental or predicted
-	for ppi in predicted_net:
-		ppi_taxid_pair = re.split(r' vs. ', ppi[1])
-		this_OG_i = [ppi[0], ppi[3]]
-		if this_OG_i not in OG_i:
-			OG_i.append(this_OG_i)			
-		if (target_taxid in ppi_taxid_pair or parent_taxid in ppi_taxid_pair):
-			if target_taxid == ppi_taxid_pair[0] and target_taxid == ppi_taxid_pair[1]:
-				if ppi[4] == "association":
-					method = "Experimental results, spoke expansion"
-				else:	
-					method = "Experimental results"
-			else:
-				method = "Experimental results, related strain"
-			this_reverse_OG_i = [ppi[3], ppi[0]]
-			experimental_OG_i.append(this_OG_i)
-			if this_OG_i not in experimental_OG_i_unique:
-				if this_reverse_OG_i not in experimental_OG_i_unique:
-					experimental_OG_i_unique.append(this_OG_i)
-		else:
-			if taxonomy_compare == 1:	#Determine taxonomic lineage-based similarity if asked
-				#Doesn't work quite right yet
-				taxid_db.seek(0,0)
-				level_match_score = 0
-				target_lineage_line = re.split(r';+', target_lineage)
-				for line in taxid_db:
-					split_line = re.split(r'\t+', line.rstrip('\t\n'))
-					if int(ppi[1]) == int(split_line[0]):
-						lineage_line = re.split(r';+', split_line[1])
-						for level in target_lineage_line:
-							if level in lineage_line:
-								level_match_score = level_match_score +1
-				method = "Predicted interolog, level " + str(level_match_score)
-			else:
-				method = "Predicted interolog"
-		out_string = ("\t".join(ppi) + "\t" + method + "\n")
-		activefile.write(out_string)
-	activefile.close()
-	non_interactor_count = 0
-	for og_and_prot in target_loci:
-		if og_and_prot[0] not in predicted_OG_coverage_unique or og_and_prot[0] == "NA":
-			out_string = ("\t".join(og_and_prot) + "\n")
-			noninteracting_file.write(out_string)
-			non_interactor_count = non_interactor_count + 1
-	noninteracting_file.close()
-	if output_mode == 1:
-		stats_output = [target_name, str(len(target_proteins)), str(proteins_are_na), str(non_interactor_count), str(len(target_ogs)), str(match_count), str(len(experimental_OG_i)), str(len(experimental_OG_i_unique)), str(len(predicted_net_unique_alltaxid)), str(len(predicted_OG_coverage_unique))]
-	elif output_mode == 2:
-		i_exp_proteins = find_proteins_from_OGs(experimental_OG_i_unique, target_proteins)
-		i_pred_proteins = find_proteins_from_OGs(OG_i,target_proteins)
-		i_exp_OGs = get_OGs_from_network(experimental_OG_i_unique)
-		stats_output = [target_name, str(len(target_proteins)), str(len(i_exp_proteins)), str(len(i_pred_proteins)), str(non_interactor_count), str(len(target_ogs)), str(len(i_exp_OGs)), str(len(predicted_OG_coverage_unique)), str(len(target_ogs) - len(predicted_OG_coverage_unique)), str(len(experimental_OG_i_unique)), str(len(OG_i))]
-	print("\t".join(stats_output) + "\n")
-	
-def find_proteins_from_OGs(these_interactions = [], target = []): 
-	#this retrieves ALL POSSIBLE protein interactors based on OGs
-	unique_OGs = []
-	proteins = []
-	proteins_out = []
-	for interaction in these_interactions:
-		for OG in interaction:
-			if OG not in unique_OGs:
-				unique_OGs.append(OG)
-	for OG in unique_OGs:
-		for interactor in target:
-			if OG in interactor:
-				proteins.append(interactor[1])
-	for protein in proteins:
-		if protein not in proteins_out:
-			proteins_out.append(protein)
-	return proteins_out
-	
-def get_OGs_from_network(these_interactions = []):
-	unique_OGs = []
-	for interaction in these_interactions:
-		for OG in interaction:
-			if OG not in unique_OGs:
-				unique_OGs.append(OG)
-	return unique_OGs
-'''
-
 def merge_data(list_of_filenames):
 	
 	nowstring = (date.today()).isoformat()
@@ -834,8 +700,17 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		except OSError:
 			if not os.path.isdir(storage_path):
 				raise
+				
+	pred_interactome_path = "predicted_interactomes"
+	if not os.path.isdir(pred_interactome_path):
+		try: 
+			os.mkdir(pred_interactome_path)
+			print("Setting up predicted interactome directory.")
+		except OSError:
+			if not os.path.isdir(pred_interactome_path):
+				raise
 	
-	getting_proteomes = 1
+	getting_proteomes = 1			#Can retrieve proteome entries from Uniprot and will map to OGs.
 	while getting_proteomes == 1:
 		get_new_proteomes = raw_input("Get a proteome from Uniprot? (Y/N)\n")
 		if get_new_proteomes in ["Y", "y"]:
@@ -873,15 +748,30 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		for line in proteome_file:
 			one_protein = line.rstrip()
 			proteome_proteins.append(one_protein)
+		total_proteins = 0
+		total_proteins_mapped = 0
 		for protein in proteome_proteins:
 			og_mapped = 0	#All proteins are unmapped to OGs by default
+			total_proteins = total_proteins +1
 			if protein in map_dict:
 				og_mapped = 1
+				total_proteins_mapped = total_proteins_mapped +1
 				proteome_map_file.write(map_dict[protein] + "\t" + protein + "\t" + str(og_mapped) + "\n")
 			else:
 				proteome_map_file.write(protein + "\t" + protein + "\t" + str(og_mapped) + "\n")
-			
-	proteome_map_list = glob.glob('proteomes\proteome_map_*.txt')	#Proteomes mapped to eggNOG OGs, labeled with taxid
+		
+		proteome_file.close()
+		os.remove(proteome_filename)	#Remove the raw file as it's redundant now.
+		
+		print(proteome_filename + " contains " + str(total_proteins) + " proteins. " 
+				+ str(total_proteins_mapped) + " map to OGs.")
+		if total_proteins_mapped == 0:
+			print("WARNING: No proteins in this proteome map to OGs.")
+	
+	os.chdir(storage_path)
+	proteome_map_list = glob.glob('proteome_map_*.txt')	#Proteomes mapped to eggNOG OGs, labeled with taxid
+	os.chdir("..")
+	
 	#Uses Entrez here for more info about taxid corresponding to proteome.
 	print("\nAvailable proteome maps:")
 	for proteome_filename in proteome_map_list:
@@ -894,10 +784,67 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
 		else:
 			print(taxid_name + "\t\t" + proteome_filename)
-			
-	print("\n")
 	
-def get_a_proteome():
+	#Now that we have proteomes, we can use them to predict interactomes.
+	
+	continue_prediction = raw_input("Predict interactomes for all above? (Y/N)\n")
+	if continue_prediction in ["Y", "y"]:
+		print("Note: work in progress")
+	else:
+		return None
+		
+	print("Loading meta-interactome files.")	#Only uses the consensus right now, but full meta-interactome may be needed
+	consensus_interactions = []					#if we want to filter by spoke expansion or know individual proteins
+	all_interactions = []
+	
+	for line in consensusfile:
+		one_consensus_interaction = (line.rstrip()).split("\t")
+		consensus_interactions.append(one_consensus_interaction)
+	consensusfile.close()
+	for line in metafile:
+		one_interaction = (line.rstrip()).split("\t")
+		all_interactions.append(one_interaction)	#This is just the raw interaction list at this point
+	metafile.close()
+	
+	for proteome_filename in proteome_map_list:	#Go through each of the available OG-mapped proteomes
+		print("\nPredicting interactome for " + proteome_filename + ". Interactions predicted: ")
+		this_proteome_map = []	#A list of both OGs and their corresponding proteins
+		this_proteome = []	#A list of just OGs
+		this_pred_interactome = []
+		os.chdir(storage_path)
+		proteome_map_file = open(proteome_filename)
+		for line in proteome_map_file:
+			one_og_and_protein = (line.rstrip()).split("\t")[0:2]
+			one_og = (line.rstrip()).split("\t")[0]
+			this_proteome_map.append(one_og_and_protein)
+			this_proteome.append(one_og)
+		proteome_map_file.close()
+			
+		os.chdir("..")
+		os.chdir(pred_interactome_path)
+		pred_interactome_filename = proteome_filename.replace("proteome_map", "pred_interactome")
+		pred_interactome_file = open(pred_interactome_filename, "w")
+		
+		predicted_count = 0
+		for interaction in consensus_interactions:
+			if interaction[0] in this_proteome and interaction[1] in this_proteome:
+				if interaction not in this_pred_interactome:	#Unique interactions only.
+					if predicted_count % 10 == 0:
+						sys.stdout.write(".")
+					predicted_count = predicted_count +1
+					if predicted_count % 100 == 0:
+						sys.stdout.write(str(predicted_count))
+					this_pred_interactome.append(interaction)
+		sys.stdout.write(str(predicted_count))
+		for interaction in this_pred_interactome:
+			pred_interactome_file.write("\t".join(interaction) + "\n")
+		
+		pred_interactome_file.close()
+		os.chdir("..")
+		
+	print("\nComplete.\n")
+	
+def get_a_proteome():	#Does what it says.	Much more organized than the rest of this since I wrote it a while ago.
 	
 	def get_search_url(query, fil):
 		search_url = "http://www.uniprot.org/proteomes/?query=" + query + \
