@@ -785,7 +785,7 @@ def subset_expansion(metafile, consensusfile):
 				taxid = (((((interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
 				protein = interaction[1].lstrip("uniprotkb:")
 				if protein not in protein_annotations:
-					protein_annotations[protein] = interaction[23]
+					protein_annotations[protein] = [interaction[23], interaction[43]]
 				protein_and_source = [protein, taxid]
 				(expanded_interactions[interactor]).append(protein_and_source)
 			if interaction[43] == interactor:
@@ -793,7 +793,7 @@ def subset_expansion(metafile, consensusfile):
 					taxid = (((((interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
 					protein = interaction[0].lstrip("uniprotkb:")
 					if protein not in protein_annotations:
-						protein_annotations[protein] = interaction[22]
+						protein_annotations[protein] = [interaction[22], interaction[42]]
 					protein_and_source = [protein, taxid]
 					(expanded_interactions[interactor]).append(protein_and_source)
 	
@@ -817,9 +817,9 @@ def subset_expansion(metafile, consensusfile):
 	#All are included here, for now.
 	
 	for interactor in consensus_interactors_taxfilt:
-		subgraph_node_file.write(interactor + "\t" + "\t".join(consensus_interactors_taxfilt[interactor]) + "\n")
+		subgraph_node_file.write(interactor + "\t" + "\t".join(consensus_interactors_taxfilt[interactor]) + "\t-\n")
 	for protein in protein_annotations:
-		subgraph_node_file.write(protein + "\t-\t" + protein_annotations[protein] + "\n")
+		subgraph_node_file.write(protein + "\t-\t" + "\t".join(protein_annotations[protein]) + "\n")
 		
 	print("Done.")
 	
