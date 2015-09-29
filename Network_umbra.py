@@ -76,11 +76,13 @@ Verified that self-interactions aren't counted incorrectly.
 Subgraph expansion and filtering module is complete.
 Can provide contribution counts for each taxid in the consensus network.
 Basic interactome prediction (based on consensus) is complete. Will download proteomes from Uniprot on request.
+Added unique proteins to predicted interactome output...but the counts seem far too small. 
 
 IN PROGRESS:
 *Are priorities
 
 **Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
+	This work is in progress but output needs to be verified.
 **For a group of interactome predictions, get counts for the following:
 	(For Fig 4A)
 	1. Unique proteins in proteome
@@ -827,16 +829,20 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	metafile.close()
 	
 	for proteome_filename in proteome_map_list:	#Go through each of the available OG-mapped proteomes
-		print("\nPredicting interactome for " + proteome_filename + ". Interactions predicted: ")
-		this_proteome_map = []	#A list of both OGs and their corresponding proteins
+		print("\nPredicting interactome for " + proteome_filename + ". Consensus interactions predicted: ")
+		this_proteome_map = {}	#A dictionary of OGs to multiple proteins, since >1 protein may map to an OG.
 		this_proteome = []	#A list of just OGs
 		this_pred_interactome = []
 		os.chdir(storage_path)
 		proteome_map_file = open(proteome_filename)
 		for line in proteome_map_file:
-			one_og_and_protein = (line.rstrip()).split("\t")[0:2]
-			one_og = (line.rstrip()).split("\t")[0]
-			this_proteome_map.append(one_og_and_protein)
+			contents = (line.rstrip()).split("\t")
+			one_protein = contents[1]
+			one_og = contents[0]
+			if one_og not in this_proteome_map:
+				this_proteome_map[one_og] = [one_protein]
+			else:
+				this_proteome_map[one_og].append(one_protein)
 			this_proteome.append(one_og)
 		proteome_map_file.close()
 			
@@ -845,19 +851,27 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		pred_interactome_filename = proteome_filename.replace("proteome_map", "pred_interactome")
 		pred_interactome_file = open(pred_interactome_filename, "w")
 		
-		predicted_count = 0
+		con_predicted_count = 0
+		prot_predicted_count = 0
 		for interaction in consensus_interactions:
 			if interaction[0] in this_proteome and interaction[1] in this_proteome:
 				if interaction not in this_pred_interactome:	#Unique interactions only.
-					if predicted_count % 10 == 0:
+					if con_predicted_count % 10 == 0:
 						sys.stdout.write(".")
-					predicted_count = predicted_count +1
-					if predicted_count % 100 == 0:
-						sys.stdout.write(str(predicted_count))
-					this_pred_interactome.append(interaction)
-		sys.stdout.write(str(predicted_count))
+					con_predicted_count = con_predicted_count +1
+					if con_predicted_count % 100 == 0:
+						sys.stdout.write(str(con_predicted_count))
+					for proteinA in this_proteome_map[interaction[0]]:	#Expand interaction to all possible proteins with OG matches
+						for proteinB in this_proteome_map[interaction[1]]:
+							unique_interaction = [proteinA, proteinB, interaction[0], interaction[1]]
+							prot_predicted_count = prot_predicted_count +1
+							this_pred_interactome.append(unique_interaction)
+		sys.stdout.write(str(con_predicted_count))
 		for interaction in this_pred_interactome:
 			pred_interactome_file.write("\t".join(interaction) + "\n")
+		
+		print("\nPredicted " + str(con_predicted_count) + " OG-based interactions and " + 
+				str(prot_predicted_count) + " protein-protein interactions for this proteome.")
 		
 		pred_interactome_file.close()
 		os.chdir("..")
