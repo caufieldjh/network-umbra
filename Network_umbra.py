@@ -74,19 +74,39 @@ Can append input data sets into a single set of interactions. Checks for proper 
 Multiple-OG interactors are handled as single unique OGs in the consensus set and receive annotations.
 Verified that self-interactions aren't counted incorrectly.
 Subgraph expansion and filtering module is complete.
+Can provide contribution counts for each taxid in the consensus network.
+Basic interactome prediction (based on consensus) is complete. Will download proteomes from Uniprot on request.
 
 IN PROGRESS:
 *Are priorities
 
-Get counts and statistics for input data and various interactomes.
+**Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
+**For a group of interactome predictions, get counts for the following:
+	(For Fig 4A)
+	1. Unique proteins in proteome
+	2. Proteins not in PPI
+	3. Proteins with experimental PPI and direct predictions (either the original PPI, or PPI from shared OGs in the same species)
+	4. Proteins with predicted PPI (interactions originally seen in different species)
+	
+	(For Fig 4B)
+	5. Unique OGs in proteome
+	6. OGs without interactions
+	7. OGs with experimental interactions (see item 3)
+	8. OGs with predicted interactions (see item 4)
+	
+	(For Fig 4C)
+	9. Unique OG interactions in the predicted network
+	10. Unique experimental OG interactions 
+
+	Also want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
+
 *Do interactome prediction for a given proteome. Download proteome on request.
 Use protein and species count from eggNOG (it's in the annotation file).
-Output interaction sets, filtered by FuncCat (and especially OG UFs).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
 	Or at least get interaction frequencies by FuncCat (as in filtering goal above)
 *Assign methods to interactions (more general than original data, so we can detect spoke expansion)
 	Spoke expansion could actually be filtered out in the input set (use complex:"-") but would rather keep it.
-Download a proteome with a search query and set up OG mapping for it.
+
 '''
 
 import glob, gzip, operator, os, re, requests, sys, urllib2, zipfile
