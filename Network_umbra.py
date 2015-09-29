@@ -89,7 +89,7 @@ Perform ANOVA between different FuncCats to see consensus interaction patterns.
 Download a proteome with a search query and set up OG mapping for it.
 '''
 
-import glob, gzip, os, re, requests, sys, urllib2, zipfile
+import glob, gzip, operator, os, re, requests, sys, urllib2, zipfile
 from Bio import Entrez
 from bs4 import BeautifulSoup
 from collections import Counter
@@ -914,7 +914,43 @@ def get_a_proteome():	#Does what it says.	Much more organized than the rest of t
 	proteome_response = requests.get(proteome_url)
 	proteome_text = parse_proteome_entry(proteome_response.text)
 	save_proteome(proteome_text, chosen_entry[2])
+
+def describe_consensus(consensusfile):
+	cons_stats_filenames = glob.glob("cons_statistics_*.txt")
+	if len(cons_stats_filenames) > 1:
+		print("More than one consensus statistics file found. Check for duplicates.")
+		return None
+	if len(cons_stats_filenames) == 0: 
+		print("No consensus statistics file found. Will skip basic counts.")
+	else:
+		con_stats = open(cons_stats_filenames[0])
+		for line in con_stats:
+			print(line)
+		print("\n")
 	
+	consensus_interactions = []
+	for line in consensusfile:
+		one_interaction = (line.rstrip()).split("\t")
+		consensus_interactions.append(one_interaction)
+	
+	print("Top taxid contributions, in number of consensus interactions corresponding to the taxid.")
+	all_taxids = {}	#All taxids AND their counts.
+	for interaction in consensus_interactions:
+		these_sources = interaction[4].split()
+		for taxid in these_sources:
+			if taxid not in all_taxids:
+				all_taxids[taxid] = 1
+			all_taxids[taxid] = all_taxids[taxid] + 1
+
+	sorted_taxids = sorted(all_taxids.items(), key=operator.itemgetter(1), reverse=True)
+	top_ten_taxids = sorted_taxids[0:15]
+	
+	for taxid in top_ten_taxids:
+		taxid_only = taxid[0]
+		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+		target_records = Entrez.read(target_handle)
+		taxid_name = target_records[0]["ScientificName"]
+		print(taxid_name + "\t" + taxid[0] + "\t" + str(taxid[1]))
 			
 #Main
 
@@ -1048,9 +1084,10 @@ print("\nUsing " + consensusfile.name + " as the consensus network.")
 requested = 0
 while requested == 0:
 	print("\n------------------------------------------------------------")
-	request_next = raw_input("Choose from the following options.\n" 
+	request_next = raw_input("\nChoose from the following options.\n" 
 		"A: Generate expanded subgraphs of the consensus network, filtering by function.\n"
 		"B: Generate a predicted interactome for one or more proteomes.\n"
+		"C: Get statistics for the consensus meta-interactome.\n"
 		"X: Exit.\n") 
 	if request_next in ["x", "X"]:
 		sys.exit("Exiting...")
@@ -1058,24 +1095,8 @@ while requested == 0:
 		subset_expansion(metafile, consensusfile)
 	if request_next in ["b", "B"]:
 		predict_interactome(mapping_file_list, metafile, consensusfile)
-	print("Choose from the list, please.")
-
-'''	
-target_file_list = glob.glob('*target.txt')
-if len(target_file_list) == 0:
-	print("No target proteome files found, or may not be named properly.")
-	one_target_file = raw_input("Provide the filename of one target proteome file")
-	else:
-		target_file_list.append(one_target_file)
-		single_proteome = 1
-for filename in target_file_list:
-	taxid = (re.split('-', filename))[0]
-	try:
-		targetfile = open(filename)
-	except IOError as e:
-		print("I/O error({0}): {1}".format(e.errno, e.strerror))
-	network_analyze(targetfile, taxid)
-	targetfile.close()
-'''
+	if request_next in ["c", "C"]:
+		describe_consensus(consensusfile)
+	print("\nChoose from the list, please.")
 			
 sys.exit(0)
