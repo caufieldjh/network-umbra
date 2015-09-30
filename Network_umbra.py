@@ -81,6 +81,9 @@ Added unique proteins to predicted interactome output...but the counts seem far 
 IN PROGRESS:
 *Are priorities
 
+**Need to check on the consensus network building step - some interaction in the meta-interactome aren't
+	making it into the consensus.
+
 **Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
 	This work is in progress but output needs to be verified.
 **For a group of interactome predictions, get counts for the following:
@@ -796,16 +799,20 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	
 	#Uses Entrez here for more info about taxid corresponding to proteome.
 	print("\nAvailable proteome maps:")
+	taxid_context = {}	#We'll keep the taxonomy information for later.
 	for proteome_filename in proteome_map_list:
 		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
 		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
 		target_records = Entrez.read(target_handle)
+		#print(target_records)
 		taxid_name = target_records[0]["ScientificName"]
+		taxid_parent = target_records[0]["ParentTaxId"]
 		taxid_division = target_records[0]["Division"]
 		if taxid_division != "Bacteria":
 			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
 		else:
 			print(taxid_name + "\t\t" + proteome_filename)
+		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]
 	
 	#Now that we have proteomes, we can use them to predict interactomes.
 	
@@ -823,16 +830,22 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		one_consensus_interaction = (line.rstrip()).split("\t")
 		consensus_interactions.append(one_consensus_interaction)
 	consensusfile.close()
+	
 	for line in metafile:
 		one_interaction = (line.rstrip()).split("\t")
 		all_interactions.append(one_interaction)	#This is just the raw interaction list at this point
 	metafile.close()
 	
+	#Interactome prediction starts here, iterating through each OG-mapped proteome.
 	for proteome_filename in proteome_map_list:	#Go through each of the available OG-mapped proteomes
-		print("\nPredicting interactome for " + proteome_filename + ". Consensus interactions predicted: ")
+		print("\nPredicting interactome for " + proteome_filename + ".")
+		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
 		this_proteome_map = {}	#A dictionary of OGs to multiple proteins, since >1 protein may map to an OG.
-		this_proteome = []	#A list of just OGs
-		this_pred_interactome = []
+		this_proteome = []	#A list of just proteins
+		this_og_eome = []	#A list of just OGs in the proteome
+		this_pred_interactome = []	#Actually the interactome at any one time - the whole prediction is written to file
+		this_pred_interactome_details = [] #The same interactome, but with contextual details
+		#It will also include a prediction category.
 		os.chdir(storage_path)
 		proteome_map_file = open(proteome_filename)
 		for line in proteome_map_file:
@@ -843,7 +856,9 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 				this_proteome_map[one_og] = [one_protein]
 			else:
 				this_proteome_map[one_og].append(one_protein)
-			this_proteome.append(one_og)
+			this_proteome.append(one_protein)	#Each line in the input should already contain a unique protein ID
+			if one_og not in this_og_eome:
+				this_og_eome.append(one_og)	#Should be the same as the keys in this_proteome_map
 		proteome_map_file.close()
 			
 		os.chdir("..")
@@ -851,27 +866,91 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		pred_interactome_filename = proteome_filename.replace("proteome_map", "pred_interactome")
 		pred_interactome_file = open(pred_interactome_filename, "w")
 		
-		con_predicted_count = 0
-		prot_predicted_count = 0
-		for interaction in consensus_interactions:
-			if interaction[0] in this_proteome and interaction[1] in this_proteome:
-				if interaction not in this_pred_interactome:	#Unique interactions only.
-					if con_predicted_count % 10 == 0:
+		pred_ppi_count = 0	#The count of PPI from predictions
+		exp_ppi_count = 0	#The count of PPI from experimental results, counting spoke expansion
+		
+		#First pass: check the meta-interactome for exact match PPI
+		#This is mostly to account for proteins without OG matches, but we count them all 
+		#as we want to distingish between interactions seen already and new predictions.
+		#Like with building the consensus set, we need to check for related taxids.
+		
+		print("Checking for experimental interactions.")
+		for interaction in all_interactions:
+			same_species = 0	#Well, not the same, but same as the target species OR related
+			parent_taxid = taxid_context[taxid][1]
+			taxid_A = (((((interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+			taxid_B = (((((interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+			if taxid == taxid_A or parent_taxid == taxid_A:
+				if taxid == taxid_B or parent_taxid == taxid_B:	
+					same_species = 1
+			#Only checks if they're a match to target or are parent of target.
+			#Need to know if they're child of target OR share a parent.
+			#Still need to add other taxid checks here
+			if same_species == 1:
+				proteinA = interaction[0].lstrip("uniprotkb:")
+				proteinB = interaction[1].lstrip("uniprotkb:")
+				ogA = interaction[42]
+				ogB = interaction[43]
+				unique_interaction = [proteinA, proteinB, ogA, ogB]
+				unique_interaction_detailed = [proteinA, proteinB, ogA, ogB, "Experimental"]
+				if unique_interaction not in this_pred_interactome:
+					exp_ppi_count = exp_ppi_count +1
+					if exp_ppi_count % 10 == 0:
 						sys.stdout.write(".")
-					con_predicted_count = con_predicted_count +1
-					if con_predicted_count % 100 == 0:
-						sys.stdout.write(str(con_predicted_count))
-					for proteinA in this_proteome_map[interaction[0]]:	#Expand interaction to all possible proteins with OG matches
-						for proteinB in this_proteome_map[interaction[1]]:
-							unique_interaction = [proteinA, proteinB, interaction[0], interaction[1]]
-							prot_predicted_count = prot_predicted_count +1
+					if exp_ppi_count % 100 == 0:
+						sys.stdout.write(str(exp_ppi_count))
+					this_pred_interactome.append(unique_interaction)
+					this_pred_interactome_details.append(unique_interaction_detailed)
+		sys.stdout.write(str(exp_ppi_count))
+		
+		#Second pass: expand experimental interactions based on OGs.
+		#That is, if two proteins interact, predict all proteins in their two OGs interact.
+		
+		#Third pass: make predictions based on OGs in other species.
+		print("\nMaking interaction predictions.")
+		for interaction in consensus_interactions:
+			if interaction[0] in this_og_eome and interaction[1] in this_og_eome:	#Check for OG vs. OG first
+				for proteinA in this_proteome_map[interaction[0]]:	#Expand interaction to all possible proteins with OG matches
+					for proteinB in this_proteome_map[interaction[1]]:
+						unique_interaction = [proteinA, proteinB, interaction[0], interaction[1]]
+						unique_interaction_detailed = [proteinA, proteinB, interaction[0], interaction[1], "Predicted"]
+						if unique_interaction not in this_pred_interactome:
+							pred_ppi_count = pred_ppi_count +1
 							this_pred_interactome.append(unique_interaction)
-		sys.stdout.write(str(con_predicted_count))
-		for interaction in this_pred_interactome:
+							this_pred_interactome_details.append(unique_interaction_detailed)
+							if pred_ppi_count % 10 == 0:
+								sys.stdout.write(".")
+							if pred_ppi_count % 100 == 0:
+								sys.stdout.write(str(pred_ppi_count))
+							
+			#Don't need to handle protein vs. protein as we should have seen it in the meta-interactome already
+			#DO need to handle OG vs. protein and protein vs. OG.
+			#DO need to handle multiple OGs (delimited w/ comma)
+				
+		sys.stdout.write(str(pred_ppi_count))
+		
+		#This is just for testing.
+		'''
+		for interaction in all_interactions:
+			taxid_A = (((((interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+			taxid_B = (((((interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
+			if taxid == taxid_A or taxid == taxid_B:
+				proteinA = interaction[0].lstrip("uniprotkb:")
+				proteinB = interaction[1].lstrip("uniprotkb:")
+				ogA = interaction[42]
+				ogB = interaction[43]
+				this_meta_interaction = [proteinA, proteinB, ogA, ogB]
+				if this_meta_interaction not in this_pred_interactome:
+					print(this_meta_interaction)
+		'''
+			
+		#Write file.
+		for interaction in this_pred_interactome_details:
 			pred_interactome_file.write("\t".join(interaction) + "\n")
 		
-		print("\nPredicted " + str(con_predicted_count) + " OG-based interactions and " + 
-				str(prot_predicted_count) + " protein-protein interactions for this proteome.")
+		#Need to fix this
+		#print("\nPredicted " + str(pred_ppi_count) + " OG-based interactions and " + 
+		#		str(exp_ppi_count) + " protein-protein interactions for this proteome.")
 		
 		pred_interactome_file.close()
 		os.chdir("..")
