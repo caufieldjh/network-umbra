@@ -63,16 +63,16 @@ Generates meta-interactome and rudimentary consensus meta-interactome.
 IntAct data cleaned before using (removes "intact" and "chebi" interactors)
 A few basic counts (interactors and interactions) are made for meta-interactome and consensus sets
 Counts for all consensus interactions are also made across the whole meta-interactome and provided in consensus network
-Downloads the eggNOG annotation file for all NOGs but doesn't do anything with it yet
+Downloads the eggNOG annotation file for all NOGs
 Gets taxon IDs, names, and parent taxon IDs. Adds them to interactions in consensus network but doesn't compare to eliminate redundant taxids
 	Checks for parent and child relationships between taxon IDs to limit redundancy.
-Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Use them in the consensus network. 
+Gets and maps FuncCat and description annotations (for both LUCA-level and bacteria) to OGs. Uses them in the consensus network. 
 Provides the option to use a local file in lieu of a downloaded one (especially as PSIQUIC filtering may not provide what we want).
 Filters out any input interactions involving non-bacterial taxons (at the meta-interactome building step).
 Removes true cross-species interactions at the consensus network building step
 Can append input data sets into a single set of interactions. Checks for proper format.
 Multiple-OG interactors are handled as single unique OGs in the consensus set and receive annotations.
-Verified that self-interactions aren't counted incorrectly.
+Verifies that self-interactions aren't counted incorrectly.
 Subgraph expansion and filtering module is complete.
 Can provide contribution counts for each taxid in the consensus network.
 Basic interactome prediction (based on consensus) is complete. Will download proteomes from Uniprot on request.
