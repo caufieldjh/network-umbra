@@ -81,8 +81,8 @@ Added unique proteins to predicted interactome output...but the counts seem far 
 IN PROGRESS:
 *Are priorities
 
-**Need to check on the consensus network building step - some interaction in the meta-interactome aren't
-	making it into the consensus.
+**Need to verify consensus interaction counts. Should be correct now, though.
+**Need to re-verify subgraph expansion output and interactome prediction results with new consensus output.
 
 **Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
 	This work is in progress but output needs to be verified.
@@ -376,33 +376,15 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	consensus_network_file = open(consensus_network_filename, "w")
 	
 	consensus_interactors = []	#Consensus interactome interactors - an OG where mapping is possible
-	all_interactions = []	#Meta-interactome interactions - unique by protein ID but contain OGs too.
-	consensus_interactions = []	#Consensus interactome interactions and associated data. Get written to output file.
-	consensus_interactions_simple = []	#Just the interactions in the consensus interactome as just their interactors
+	all_interactions_taxids = []	#All interactions in the meta-interactome, but just with OGs and taxids 
+	all_interactions_simple = [] #All interactions in the meta-interactome, but just with OGs
+	consensus_interactions = []	#Consensus interactome interactions first, then associated data. Get written to output file.
 	all_annotations = [] #Annotations in file - a bit inefficient to load the whole thing but more searchable this way
 	consensus_annotations = {} #Dictionary to store functional category and descriptions of OG interactors.
 	
-	#First pass: create a list of unique interactors and interactions, using OG IDs
-	print("Finding unique interactors and interactions. Interactions found:")
-	cons_interaction_count = 0
+	#Load the meta-interactome file, removing true cross-species interactions
 	for line in metafile:
 		one_interaction = ((line.rstrip()).split("\t"))
-		this_interaction_simple = [one_interaction[42], one_interaction[43]]
-		this_interaction_simple_rev = [one_interaction[43], one_interaction[42]]
-		new_interaction = 0
-		for interactor in [one_interaction[42], one_interaction[43]]:	#Interactor A or B's OG or ID if no OG mapped
-			if interactor not in consensus_interactors:
-				consensus_interactors.append(interactor)
-		if this_interaction_simple not in consensus_interactions_simple and this_interaction_simple_rev not in consensus_interactions_simple:
-			consensus_interactions_simple.append(this_interaction_simple)
-			new_interaction = 1
-		if new_interaction == 1:
-			cons_interaction_count = cons_interaction_count +1
-			if cons_interaction_count % 100 == 0:
-					sys.stdout.write(".")
-			if cons_interaction_count % 1000 == 0:
-					sys.stdout.write(str(cons_interaction_count))
-			consensus_interactions.append(this_interaction_simple)
 		taxid_A = (((((one_interaction[9].split("|"))[0]).lstrip("taxid:")).split("("))[0])
 		taxid_B = (((((one_interaction[10].split("|"))[0]).lstrip("taxid:")).split("("))[0])
 		taxid_mismatch = 0	#Assume that the two taxids are the same by default
@@ -414,7 +396,28 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 			if (taxid_species[taxid_A])[1] == taxid_B or (taxid_species[taxid_B])[1] == taxid_A: #Check for parent-child relationship
 				taxid_mismatch = 0	
 		if taxid_mismatch != 1:
-			all_interactions.append([one_interaction[42], one_interaction[43], taxid_A, taxid_B])	#Get interactors AND taxid of source of both interactors
+			all_interactions_taxids.append([one_interaction[42], one_interaction[43], taxid_A, taxid_B])
+			all_interactions_simple.append([one_interaction[42], one_interaction[43]])
+	
+	#First pass: create a list of unique interactors and interactions, using OG IDs
+	print("Finding unique interactors and interactions. Interactions found:")
+	cons_interaction_count = 0
+	
+	for interaction in all_interactions_simple:
+		interaction_rev = [interaction[1], interaction[0]]
+		new_interaction = 0
+		for interactor in interaction:	#Interactor A or B's OG or ID if no OG mapped
+			if interactor not in consensus_interactors:
+				consensus_interactors.append(interactor)
+		if interaction not in consensus_interactions and interaction_rev not in consensus_interactions:
+			new_interaction = 1
+		if new_interaction == 1:
+			cons_interaction_count = cons_interaction_count +1
+			if cons_interaction_count % 100 == 0:
+					sys.stdout.write(".")
+			if cons_interaction_count % 1000 == 0:
+					sys.stdout.write(str(cons_interaction_count))
+			consensus_interactions.append(interaction)
 			
 	#Second pass: count the number of interactions contributing to each consensus
 	#Compare taxids across interactions to see how many different sources interaction is seen for (i.e., X different species) 
@@ -426,17 +429,17 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	print("Consensus interactions checked, out of " + str(len(consensus_interactions)) +":")
 	
 	all_consensus_taxids = []
-	con_interactions_checked = 0
+	con_interactions_counted = 0
 	for interaction in consensus_interactions:
-		con_interactions_checked = con_interactions_checked +1
-		if con_interactions_checked % 100 == 0:
+		con_interactions_counted = con_interactions_counted +1
+		if con_interactions_counted % 100 == 0:
 			sys.stdout.write(".")
-		if con_interactions_checked % 1000 == 0:
-			sys.stdout.write(str(con_interactions_checked))
+		if con_interactions_counted % 1000 == 0:
+			sys.stdout.write(str(con_interactions_counted))
 		interaction_sources = []	#The list of taxids found to correspond to this interaction.
 		original_count = 0
 		#This gets a bit complicated.
-		for original_interaction in all_interactions:	#For each interaction in the set of all (not OG-compressed consensus) meta-interactome interactions...
+		for original_interaction in all_interactions_taxids:	#For each interaction in the set of all (not OG-compressed consensus) meta-interactome interactions...
 			original_interaction_slim = original_interaction[0:2]
 			original_interaction_slim_rev = [original_interaction[1], original_interaction[0]]
 			if interaction == original_interaction_slim or interaction == original_interaction_slim_rev:	#If the original interaction OR its reverse matches the consensus interaction...
@@ -466,6 +469,7 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		interaction.append(str(original_count))
 		interaction.append(str(len(interaction_sources)))
 		interaction.append(" ".join(interaction_sources))
+		#print(interaction)
 	
 	#Third pass: get the functional categories and descriptions of all interactors
 	print("\nAdding interactor annotations.")
@@ -479,7 +483,13 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		ann_file.close()
 	
 	multiple_og_count = 0	#The count of interactors mapping to >1 OG. Are treated as single OGs as this may be biologically meaningful
+	annotation_count = 0
 	for interactor in consensus_interactors:
+		annotation_count = annotation_count +1
+		if annotation_count % 100 == 0:
+			sys.stdout.write(".")
+		if annotation_count % 1000 == 0:
+			sys.stdout.write(str(annotation_count))
 		consensus_annotations[interactor] = ["NA", "NA"] #Should only happen if OG not in description file (e.g. if it's unmapped to an OG)
 		if "," in interactor:	#Meaning it maps to multiple OGs, so we need to annotate all of them
 			#print(interactor)
@@ -509,7 +519,7 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		for interactor in interaction[0:2]:
 			interaction.append("\t".join(consensus_annotations[interactor]))
 	
-	print("Consensus meta-interactome involves " + str(len(consensus_interactors)) +
+	print("\nConsensus meta-interactome involves " + str(len(consensus_interactors)) +
 			" interactors and " + str(cons_interaction_count) + " interactions.")
 	print("It involves " + str(len(all_consensus_taxids)) + " unique taxids, " +
 			"though some may be closely related.")
