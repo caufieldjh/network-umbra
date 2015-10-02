@@ -751,7 +751,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	while getting_proteomes == 1:
 		get_new_proteomes = raw_input("Get a proteome from Uniprot? (Y/N)\n")
 		if get_new_proteomes in ["Y", "y"]:
-			get_a_proteome()
+			get_a_proteome()	#run get_a_proteome() method
 		else:
 			print("Will now map proteomes to OGs.")
 			break
@@ -999,7 +999,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 					print(this_meta_interaction)
 		'''
 			
-		#Write file.
+		#Write interactome file.
 		for interaction in this_pred_interactome_detailed:
 			pred_interactome_file.write("\t".join(interaction) + "\n")
 		
@@ -1010,6 +1010,25 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		pred_interactome_file.close()
 		os.chdir("..")
 		
+	#Once all the interactome predictions for all proteomes are done, do summary statistics.
+	nowstring = (date.today()).isoformat()
+	multi_inter_stats_file_name = "interactome_statistics_" + nowstring + ".txt"
+	multi_inter_stats_file = open(multi_inter_stats_file_name, "w")
+	os.chdir("predicted_interactomes")
+	interactome_filenames = glob.glob("pred_interactome_*.txt")
+	
+	for filename in interactome_filenames:
+		taxid = ((filename.rstrip(".txt")).split("_"))[2]
+		#proteome_response = requests.get("http://www.uniprot.org/taxonomy/?query=" + taxid + "&format=tab")
+		#print(proteome_response.text)
+		
+		#Need to retrieve proteome sizes in number of proteins
+		
+	os.chdir("..")
+	#Text header
+	multi_inter_stats_file.write("Species\tTaxid\tProteins\tProteinsNotInPPI\tProteinsWithExpPPI\tProteinsWithPredPPI" +
+								"UniqueOGs\tOGsWithoutInteractions\tOGsWithExpInt\tOGsWithPredInt\tOGIntInPredNet\tExpOGIntNet")
+	
 	print("\nComplete.\n")
 	
 def get_a_proteome():	#Does what it says.	Much more organized than the rest of this since I wrote it a while ago.
