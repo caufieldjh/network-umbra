@@ -81,9 +81,6 @@ Added unique proteins to predicted interactome output...but the counts seem far 
 IN PROGRESS:
 *Are priorities
 
-**Need to verify consensus interaction counts. Should be correct now, though.
-**Need to re-verify subgraph expansion output and interactome prediction results with new consensus output.
-
 **Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
 	This work is in progress but output needs to be verified.
 **For a group of interactome predictions, get counts for the following:
@@ -940,7 +937,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		sys.stdout.write(str(exp_ppi_count))
 		
 		print("\nMaking interaction predictions.")
-		#Second pass: make predictions based on OGs.
+		#Second pass: make predictions based on OGs and the consensus interactome.
 		#That is, if two proteins interact, predict all proteins in their two OGs interact.
 		#All experimental interactions should be covered in the consensus, so don't care about species here
 		#Don't need to handle protein vs. protein as we should have seen it in the meta-interactome already
