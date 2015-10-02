@@ -1103,10 +1103,24 @@ def describe_consensus(consensusfile):
 	for line in consensusfile:
 		one_interaction = (line.rstrip()).split("\t")
 		consensus_interactions.append(one_interaction)
+		
+	taxids_and_context = {}
+	taxid_ref_list = glob.glob('taxid_context*.txt')
+	if len(taxid_ref_list) >1:
+		sys.exit("Something went wrong - more than one taxid context file found.")
+	if len(taxid_ref_list) == 0:
+		sys.exit("Something went wrong - no taxid context file found.")
+	taxid_ref_file = open(taxid_ref_list[0])
+	for line in taxid_ref_file:
+		content = ((line.rstrip()).split("\t"))
+		taxids_and_context[content[0]] = [content[1], content[2], content[3]]
+	taxid_ref_file.close()
 	
 	print("Top taxid contributions, in number of consensus interactions corresponding to the taxid.")
+	print("Name\tTaxid\tNumber of interactions")
 	all_taxids = {}	#All taxids AND their counts.
-	for interaction in consensus_interactions:
+	
+	for interaction in consensus_interactions:	#Check each interaction for contributing taxids
 		these_sources = interaction[4].split()
 		for taxid in these_sources:
 			if taxid not in all_taxids:
@@ -1114,14 +1128,12 @@ def describe_consensus(consensusfile):
 			all_taxids[taxid] = all_taxids[taxid] + 1
 
 	sorted_taxids = sorted(all_taxids.items(), key=operator.itemgetter(1), reverse=True)
-	top_ten_taxids = sorted_taxids[0:15]
+	top_taxids = sorted_taxids[0:15]
 	
-	for taxid in top_ten_taxids:
+	for taxid in top_taxids:
 		taxid_only = taxid[0]
-		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-		target_records = Entrez.read(target_handle)
-		taxid_name = target_records[0]["ScientificName"]
-		print(taxid_name + "\t" + taxid[0] + "\t" + str(taxid[1]))
+		taxid_name = taxids_and_context[taxid_only][0]
+		print(taxid_name + "\t" + taxid_only + "\t" + str(taxid[1]))
 			
 #Main
 
