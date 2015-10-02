@@ -3,15 +3,15 @@
 Predicts interactions in a protein interaction network based off a meta-interactome network.
 Uses eggNOG v.4.1.
 
-REQUIRES: Biopython 1.65 or more recent. Also needs ~600 MB of available disk space to accomodate data files and output. More space may be necessary for proteome files.
+**REQUIRES**: Biopython 1.65 or more recent. Also needs ~600 MB of available disk space to accomodate data files and output. More space may be necessary for proteome files.
 
-INPUT: Downloads all available protein-protein interactions for bacteria from IntAct.
+**INPUT**: Downloads all available protein-protein interactions for bacteria from IntAct.
   Alternatively, uses a provided PPI data file in PSI-MI TAB 2.7 format.
   REMOVE THE HEADER ROW if it's present!
   Downloads highest-level (LUCA) and bacteria-specific Uniprot ID to NOG mappings from eggNOG v.4.1.
   Downloads highest-level (LUCA) bacteria-specific NOG annotations from eggNOG v.4.1.
 
-OUTPUT: 
+**OUTPUT**: 
 
 'metainteractome[date].txt'
    A meta-interactome composed of all available bacterial protein-protein interactions.
@@ -56,7 +56,7 @@ Outputs proteome maps and predicted interactomes in respective folders and creat
 
 Uses PSIQUIC service to retrieve IntAct data - see https://github.com/micommunity/psicquic
 
-CHANGES COMPLETE:
+**CHANGES COMPLETE**:
 
 Downloads eggNOG map file (LUCA-level and bacteria specific) and IntAct interactions (just bacteria specific)
 
@@ -95,7 +95,7 @@ Basic interactome prediction (based on consensus) is complete. Will download pro
 
 Added unique proteins to predicted interactome output...but the counts seem far too small. 
 
-IN PROGRESS:
+**IN PROGRESS**:
 
 Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
 This work is in progress but output needs to be verified.
