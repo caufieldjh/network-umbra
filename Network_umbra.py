@@ -103,6 +103,7 @@ IN PROGRESS:
 	Also want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
 
 *Do interactome prediction for a given proteome. Download proteome on request.
+Evaluate predictions on the basis of OG members (large OGs have less predictive power, at least without sequence alignments)
 Use protein and species count from eggNOG (it's in the annotation file).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
 	Or at least get interaction frequencies by FuncCat (as in filtering goal above)
@@ -824,7 +825,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
 		else:
 			print(taxid_name + "\t\t" + proteome_filename)
-		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]
+		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]	#This is critical as we'll need it shortly
 	
 	#Also retrieve taxid details from the taxid context file.
 	taxid_context_filenames = glob.glob("taxid_context*.txt")
@@ -847,7 +848,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	
 	continue_prediction = raw_input("Predict interactomes for all above? (Y/N)\n")
 	if continue_prediction in ["Y", "y"]:
-		print("Note: work in progress.")
+		print("Predicting interactomes for the above species.")
 	else:
 		return None
 		
@@ -866,6 +867,8 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	metafile.close()
 	
 	#Interactome prediction starts here, iterating through each OG-mapped proteome.
+	interactome_stats = {}	#Uses taxid as key
+	
 	for proteome_filename in proteome_map_list:	#Go through each of the available OG-mapped proteomes
 		print("\nPredicting interactome for " + proteome_filename + ".")
 		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
@@ -984,6 +987,61 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 							sys.stdout.write(str(pred_ppi_count))
 		sys.stdout.write(str(pred_ppi_count))
 		
+		#Finally - get a few more protein and OG counts.
+		#These counts won't be right if we just use the proteome, as PPI may include related species
+		#Isn't a problem for predictions as they're all based off one proteome
+		#But for experimental results we just get every Uniprot ID
+		proteins_in_interactions = []
+		proteins_w_exp_ppi = []
+		proteins_w_pred_ppi = []
+		ogs_in_interactions = []
+		ogs_w_exp_int = []
+		ogs_w_pred_int = []
+		exp_og_int = []
+		pred_og_int = []
+		for interaction in this_pred_interactome_detailed:
+			og_pair = interaction[2:4] 
+			rev_og_pair = [interaction[3], interaction[2]]	#We don't care about interaction direction.
+			if interaction[4] == "Experimental":
+				for protein in interaction[0:2]:
+					if protein not in proteins_w_exp_ppi:
+						proteins_w_exp_ppi.append(protein)
+				for og in og_pair:
+					if og not in ogs_w_exp_int:
+						ogs_w_exp_int.append(og)
+				if og_pair not in exp_og_int and rev_og_pair not in exp_og_int:
+					exp_og_int.append(og_pair)
+			for protein in this_proteome:
+				both_interactors = 0
+				if protein in interaction[0:2] and protein not in proteins_in_interactions:
+					both_interactors = both_interactors +1
+					proteins_in_interactions.append(protein)
+					if interaction[4] == "Predicted" and protein not in proteins_w_pred_ppi:
+						proteins_w_pred_ppi.append(protein)
+				if both_interactors == 2:
+					break
+			for og in this_og_eome:
+				both_interactors = 0
+				if og in interaction[2:4] and og not in ogs_in_interactions:
+					both_interactors = both_interactors +1
+					ogs_in_interactions.append(og)
+					if interaction[4] == "Predicted" and og not in ogs_w_pred_int:
+						ogs_w_pred_int.append(og)
+				if both_interactors == 2:
+					break
+			if og_pair not in exp_og_int and rev_og_pair not in pred_og_int:
+				pred_og_int.append(og_pair)
+					
+		proteins_not_in_interactions = len(this_proteome) - len(proteins_in_interactions)	#Just a count, here
+		ogs_not_in_interactions = len(this_og_eome) - len(ogs_in_interactions)
+		#interactome_stats contains statistics used in batch output. Contains:
+		#Name, taxid, Proteins, ProteinsNotInPPI, ProteinsWithExpPPI, ProteinsWithPredPPI, 
+		#UniqueOGs, OGsWithoutInteractions, OGsWithExpInt, OGsWithPredInt, ExpOGIntNet, OGIntInPredNet
+		interactome_stats[taxid] = [taxid_context[taxid][0], taxid, str(len(this_proteome)), str(proteins_not_in_interactions), 
+									str(len(proteins_w_exp_ppi)), str(len(proteins_w_pred_ppi)), str(len(this_og_eome)),
+									str(ogs_not_in_interactions), str(len(ogs_w_exp_int)), str(len(ogs_w_pred_int)),
+									str(len(exp_og_int)), str(len(pred_og_int))]
+		
 		#This is just for testing.
 		'''
 		for interaction in all_interactions:
@@ -1017,18 +1075,20 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	os.chdir("predicted_interactomes")
 	interactome_filenames = glob.glob("pred_interactome_*.txt")
 	
+	stats_outlines = []	#This is where the output for each species will go, one interactome per line
 	for filename in interactome_filenames:
 		taxid = ((filename.rstrip(".txt")).split("_"))[2]
-		#proteome_response = requests.get("http://www.uniprot.org/taxonomy/?query=" + taxid + "&format=tab")
-		#print(proteome_response.text)
-		
-		#Need to retrieve proteome sizes in number of proteins
+		outline = "\t".join(interactome_stats[taxid]) + "\n"
+		stats_outlines.append(outline)
 		
 	os.chdir("..")
 	#Text header
-	multi_inter_stats_file.write("Species\tTaxid\tProteins\tProteinsNotInPPI\tProteinsWithExpPPI\tProteinsWithPredPPI" +
-								"UniqueOGs\tOGsWithoutInteractions\tOGsWithExpInt\tOGsWithPredInt\tOGIntInPredNet\tExpOGIntNet")
+	multi_inter_stats_file.write("Species\tTaxid\tProteins\tProteinsNotInPPI\tProteinsWithExpPPI\tProteinsWithPredPPI\t" +
+								"UniqueOGs\tOGsWithoutInteractions\tOGsWithExpInt\tOGsWithPredInt\tOGIntInExpNet\tOGIntInPredNet\n")
+	for outline in stats_outlines:
+		multi_inter_stats_file.write(outline)
 	
+	print("\nWrote summary statistics for these interactomes to " + multi_inter_stats_file_name)
 	print("\nComplete.\n")
 	
 def get_a_proteome():	#Does what it says.	Much more organized than the rest of this since I wrote it a while ago.
