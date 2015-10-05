@@ -53,7 +53,12 @@ DescB		Description of the second interactor
 			
 'subgraph_expansion_[FuncCat]_nodes_[date].txt'
 			Annotation file for the nodes in the expanded subgraphs.
-
+			
+'interactome_statistics_[date].txt'
+			Counts of interactors - proteins and OGs - participating in predicted interactomes.
+			Contains the following counts per input proteome:
+			Name, taxid, Proteins, ProteinsNotInPPI, ProteinsWithExpPPI, ProteinsWithPredPPI, 
+			UniqueOGs, OGsWithoutInteractions, OGsWithExpInt, OGsWithPredInt, ExpOGIntNet, OGIntInPredNet
 
 Uses PSIQUIC service to retrieve IntAct data - see https://github.com/micommunity/psicquic
 
@@ -76,13 +81,15 @@ Verifies that self-interactions aren't counted incorrectly.
 Subgraph expansion and filtering module is complete.
 Can provide contribution counts for each taxid in the consensus network.
 Basic interactome prediction (based on consensus) is complete. Will download proteomes from Uniprot on request.
-Added unique proteins to predicted interactome output...but the counts seem far too small. 
+Added unique proteins to predicted interactome output.
+Output statistics about predicted networks after building them.
+
 
 IN PROGRESS:
 *Are priorities
 
-**Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
-	This work is in progress but output needs to be verified.
+*Some proteins are not mapping to OGs here but do map to them on the eggNOG site interface. Check on why.
+
 **For a group of interactome predictions, get counts for the following:
 	(For Fig 4A)
 	1. Unique proteins in proteome
