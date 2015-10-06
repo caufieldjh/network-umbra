@@ -130,10 +130,13 @@ def get_eggnog_maps():
 	outfilepath = convfilename[0:-3]
 	if os.path.isfile(convfilename): 
 		print("Found compressed ID conversion file on disk: " + convfilename)
+<<<<<<< HEAD
 		decompress_convfile = 1
 	if os.path.isfile(outfilepath): 
 		print("Found ID conversion file on disk: " + outfilepath)
 		decompress_convfile = 0
+=======
+>>>>>>> origin/master
 	else:
 		response = urllib2.urlopen(convfilepath)
 		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
@@ -148,6 +151,7 @@ def get_eggnog_maps():
 				compressed_file.close()
 				break
 			sys.stdout.write(".")
+<<<<<<< HEAD
 		decompress_convfile = 1
 		
 	if decompress_convfile == 1:
@@ -165,6 +169,16 @@ def get_eggnog_maps():
 						sys.stdout.write(str(linecount/1000000))
 			infile.close()
 		outfile.close()
+=======
+		
+	print("Decompressing map file.")
+	with gzip.open(convfilename) as infile: #Open that compressed file, read and write to uncompressed file
+		file_content = infile.read()
+		outfile = open(outfilepath, "w+b")
+		outfile.write(file_content)
+		infile.close()
+	outfile.close()
+>>>>>>> origin/master
 	
 	#Download and decompress member NOG files (2 of them)
 	nogURL = baseURL + "data/NOG/"
@@ -179,6 +193,7 @@ def get_eggnog_maps():
 		memberfilepath = baseURL + memberfilename
 		outfilepath = memberfilename[0:-3]
 		if os.path.isfile(memberfilename): 
+<<<<<<< HEAD
 			print("\nFound compressed NOG membership file on disk: " + memberfilename)
 			decompress_memberfile = 1
 		if os.path.isfile(outfilepath): 
@@ -187,6 +202,12 @@ def get_eggnog_maps():
 		else:
 			response = urllib2.urlopen(convfilepath)
 			print("\nDownloading NOG membership file - this may take some time.")
+=======
+			print("Found compressed NOG membership file on disk: " + memberfilename)
+		else:
+			response = urllib2.urlopen(convfilepath)
+			print("Downloading NOG membership file - this may take some time.")
+>>>>>>> origin/master
 			print("Downloading from " + memberfilepath)
 			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
 			chunk = 1048576
@@ -200,6 +221,7 @@ def get_eggnog_maps():
 				sys.stdout.write(".")
 			decompress_memberfile = 1
 			
+<<<<<<< HEAD
 		if decompress_memberfile == 1:
 			print("Decompressing NOG membership file " + memberfilename)
 			#Done in chunks since it's a large file
@@ -223,6 +245,21 @@ def get_eggnog_maps():
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
 	
 	#Clean up by removing compressed files
+=======
+		print("Decompressing NOG membership file " + memberfilename)
+		with gzip.open(memberfilename) as infile: #Open that compressed file, read and write to uncompressed file
+			file_content = infile.read()
+			outfile = open(outfilepath, "w+b")
+			outfile.write(file_content)
+			infile.close()
+		outfile.close()
+>>>>>>> origin/master
+	
+	#Load and filter the ID conversion file as dictionary
+	
+	#Use filtered ID conversion input to map to NOG members
+	
+	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
 	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
