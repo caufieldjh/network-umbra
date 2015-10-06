@@ -3,9 +3,10 @@
 '''
 Predicts interactions in a protein interaction network based off a meta-interactome network.
 Uses eggNOG v.4.1.
+Written for Python 2.7. Not tested with Python 3.
 
 REQUIRES: Biopython 1.65 or more recent
-			Also needs ~600 MB of available disk space to accomodate data files and output
+			Also needs at least 5 GB of available disk space to accomodate data files and output
 			More space may be necessary for proteome files.
 
 INPUT: Downloads all available protein-protein interactions for bacteria from IntAct.
@@ -86,33 +87,18 @@ Output statistics about predicted networks after building them.
 
 
 IN PROGRESS:
-*Are priorities
+* <- Are priorities
 
-*Some proteins are not mapping to OGs here but do map to them on the eggNOG site interface.
-	May have to use the full map file in lieu of individual maps.
-	Wait a second...the main file doesn't appear to contain certain proteins either, like P74334, though the web site says that one's in COG3670
-	What map file are they using?!
+* The mapping files used here are actually those used by Uniprot - should use the main ID conversion file instead
+	as it's what eggNOG uses internally. 
+	Will need to: 
+	1. Download id conversion file and decompress
+	2. Download NOG and bactNOG member files and decompress. Combine into single file?
+	3. Filter conversion file to just UPIDs
+	4. Use member files to set up UPID to OG map file
 
-**For a group of interactome predictions, get counts for the following:
-	(For Fig 4A)
-	1. Unique proteins in proteome
-	2. Proteins not in PPI
-	3. Proteins with experimental PPI and direct predictions (either the original PPI, or PPI from shared OGs in the same species)
-	4. Proteins with predicted PPI (interactions originally seen in different species)
-	
-	(For Fig 4B)
-	5. Unique OGs in proteome
-	6. OGs without interactions
-	7. OGs with experimental interactions (see item 3)
-	8. OGs with predicted interactions (see item 4)
-	
-	(For Fig 4C)
-	9. Unique OG interactions in the predicted network
-	10. Unique experimental OG interactions 
+* Want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
 
-	Also want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
-
-*Do interactome prediction for a given proteome. Download proteome on request.
 Evaluate predictions on the basis of OG members (large OGs have less predictive power, at least without sequence alignments)
 Use protein and species count from eggNOG (it's in the annotation file).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
@@ -131,47 +117,84 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-use_main_map = True #Use the full Uniprot to eggNOG map provided by eggNOG
 
 #Functions
 
 def get_eggnog_maps(): 
-	#Download and unzip the eggNOG Uniprot ID maps
-	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/id_mappings/uniprot/"
-	if use_main_map == True:
-		mainmapfilename = "uniprot-15-May-2015.tsv.gz"	#The map file with EVERYTHING - different format but comprehensive
-		mapfiles = [mainmapfilename]
-	else:
-		bactmapfilename = "uniprot-15-May-2015.Bacteria.tsv.gz"	#The Bacteria-specific mapping file
-		lucamapfilename = "uniprot-15-May-2015.LUCA.tsv.gz"	#The LUCA mapping file - more generic NOGs
-		mapfiles = [bactmapfilename, lucamapfilename]
+	#Download and unzip the eggNOG ID conversion file 
+	#Filters file to just Uniprot IDs; the resulting file is the map file.
+	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/"
+	convfilename = "eggnog4.protein_id_conversion.tsv.gz "	#File contains ALL database identifiers and corresponding proteins
 	
-	for mapfilename in mapfiles:
-		mapfilepath = baseURL + mapfilename
-		outfilepath = mapfilename[0:-3]
-		if os.path.isfile(mapfilename): 
-			print("Found compressed map file on disk: " + mapfilename)
+	convfilepath = baseURL + convfilename
+	outfilepath = convfilename[0:-3]
+	if os.path.isfile(convfilename): 
+		print("Found compressed ID conversion file on disk: " + convfilename)
+	else:
+		response = urllib2.urlopen(convfilepath)
+		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
+		print("Downloading from " + convfilepath)
+		compressed_file = open(os.path.basename(convfilename), "w+b") #Start local compressed file
+		chunk = 1048576
+		while 1:
+			data = (response.read(chunk)) #Read one Mb at a time
+			compressed_file.write(data)
+			if not data:
+				print("\n" + convfilename + " file download complete.")
+				compressed_file.close()
+				break
+			sys.stdout.write(".")
+		
+	print("Decompressing map file.")
+	with gzip.open(convfilename) as infile: #Open that compressed file, read and write to uncompressed file
+		file_content = infile.read()
+		outfile = open(outfilepath, "w+b")
+		outfile.write(file_content)
+		infile.close()
+	outfile.close()
+	
+	#Download and decompress member NOG files (2 of them)
+	nogURL = baseURL + "data/NOG/"
+	nogfilename = "NOG.members.tsv.gz"
+	bactnogURL = baseURL + "data/bactNOG/"
+	bactnogfilename = "bactNOG.members.tsv.gz" 
+	all_nog_locations = [[nogURL, nogfilename], [bactnogURL, bactnogfilename]]
+	
+	for location in all_nog_locations:
+		baseurl = location[0]
+		memberfilename = location[1]
+		memberfilepath = baseURL + memberfilename
+		outfilepath = memberfilename[0:-3]
+		if os.path.isfile(memberfilename): 
+			print("Found compressed NOG membership file on disk: " + memberfilename)
 		else:
-			response = urllib2.urlopen(mapfilepath)
-			print("Downloading from " + mapfilepath)
-			compressed_file = open(os.path.basename(mapfilename), "w+b") #Start local compressed file
+			response = urllib2.urlopen(convfilepath)
+			print("Downloading NOG membership file - this may take some time.")
+			print("Downloading from " + memberfilepath)
+			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
 			chunk = 1048576
 			while 1:
 				data = (response.read(chunk)) #Read one Mb at a time
 				compressed_file.write(data)
 				if not data:
-					print("\n" + mapfilename + " file download complete.")
+					print("\n" + memberfilename + " file download complete.")
 					compressed_file.close()
 					break
 				sys.stdout.write(".")
 			
-		print("Decompressing map file.")
-		with gzip.open(mapfilename) as infile: #Open that compressed file, read and write to uncompressed file
+		print("Decompressing NOG membership file " + memberfilename)
+		with gzip.open(memberfilename) as infile: #Open that compressed file, read and write to uncompressed file
 			file_content = infile.read()
 			outfile = open(outfilepath, "w+b")
 			outfile.write(file_content)
 			infile.close()
 		outfile.close()
+	
+	#Load and filter the ID conversion file as dictionary
+	
+	#Use filtered ID conversion input to map to NOG members
+	
+	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
 	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
@@ -266,18 +289,7 @@ def build_meta(mapping_file_list, ppi_data):
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
 		for line in map_file:
 			one_map = ((line.rstrip()).split("\t"))
-			if use_main_map == True:	#The main uniprot map file has a different format than the others
-				try:
-					if one_map[2] != "-" and one_map[2] != "":
-						map_dict[one_map[0]] = one_map[2]
-					elif one_map[1] != "-" and one_map[1] != "":	#There may be something in other columns, so column 2's entry may just be ""
-						#So we have to check this way too
-						map_dict[one_map[0]] = one_map[1]
-				except IndexError:		#If there is only something in the second column, the rest of the line is empty and throws IndexError
-					if one_map[1] != "-" and one_map[1] != "":
-						map_dict[one_map[0]] = one_map[1]
-			else:
-				map_dict[one_map[0]] = one_map[1]
+			map_dict[one_map[0]] = one_map[1]
 		map_file.close()
 	
 	#for item in map_dict:
@@ -1244,13 +1256,14 @@ def describe_consensus(consensusfile):
 #Main
 
 #Check for eggNOG mapping file and get if needed
-mapping_file_list = glob.glob('uniprot*.tsv')
+#Requires downloading several files and building new mapping file from them
+mapping_file_list = glob.glob('uniprot_og_maps*.txt')
 if len(mapping_file_list) >2:
-	sys.exit("Only expected two Uniprot to NOG mapping files at most. Check for duplicates.")
-if len(mapping_file_list) <2:
-	print("No eggNOG mapping files found or they're incomplete. Retrieving them.")
+	sys.exit("Found more than one mapping file. Check for duplicates.")
+if len(mapping_file_list) == 0:
+	print("No eggNOG mapping files found or they're incomplete. Rebuilding them.")
 	get_eggnog_maps()
-	mapping_file_list = glob.glob('uniprot*.tsv')
+	mapping_file_list = glob.glob('uniprot_og_maps*.txt')
 	
 #Check for eggNOG annotation file and get if needed
 annotation_file_list = glob.glob('*annotations.tsv')
