@@ -88,7 +88,10 @@ Output statistics about predicted networks after building them.
 IN PROGRESS:
 *Are priorities
 
-*Some proteins are not mapping to OGs here but do map to them on the eggNOG site interface. Check on why.
+*Some proteins are not mapping to OGs here but do map to them on the eggNOG site interface.
+	May have to use the full map file in lieu of individual maps.
+	Wait a second...the main file doesn't appear to contain certain proteins either, like P74334, though the web site says that one's in COG3670
+	What map file are they using?!
 
 **For a group of interactome predictions, get counts for the following:
 	(For Fig 4A)
@@ -128,17 +131,22 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-
+use_main_map = True #Use the full Uniprot to eggNOG map provided by eggNOG
 
 #Functions
 
 def get_eggnog_maps(): 
 	#Download and unzip the eggNOG Uniprot ID maps
 	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/id_mappings/uniprot/"
-	bactmapfilename = "uniprot-15-May-2015.Bacteria.tsv.gz"	#The Bacteria-specific mapping file
-	lucamapfilename = "uniprot-15-May-2015.LUCA.tsv.gz"	#The LUCA mapping file - more generic NOGs
+	if use_main_map == True:
+		mainmapfilename = "uniprot-15-May-2015.tsv.gz"	#The map file with EVERYTHING - different format but comprehensive
+		mapfiles = [mainmapfilename]
+	else:
+		bactmapfilename = "uniprot-15-May-2015.Bacteria.tsv.gz"	#The Bacteria-specific mapping file
+		lucamapfilename = "uniprot-15-May-2015.LUCA.tsv.gz"	#The LUCA mapping file - more generic NOGs
+		mapfiles = [bactmapfilename, lucamapfilename]
 	
-	for mapfilename in [bactmapfilename, lucamapfilename]:
+	for mapfilename in mapfiles:
 		mapfilepath = baseURL + mapfilename
 		outfilepath = mapfilename[0:-3]
 		if os.path.isfile(mapfilename): 
@@ -250,6 +258,7 @@ def build_meta(mapping_file_list, ppi_data):
 	
 	print("Building meta-interactome...")
 	print("Setting up protein to OG maps.")
+	#We preferentially use bacteria mapping first
 	for input_map_file in mapping_file_list:
 		try:
 			map_file = open(input_map_file)
@@ -257,7 +266,15 @@ def build_meta(mapping_file_list, ppi_data):
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
 		for line in map_file:
 			one_map = ((line.rstrip()).split("\t"))
-			map_dict[one_map[0]] = one_map[1]
+			if use_main_map == True:	#The main uniprot map file has a different format than the others
+				try:
+					if one_map[2] != "-":
+						map_dict[one_map[0]] = one_map[2]
+				except IndexError:
+					if one_map[1] != "-":
+						map_dict[one_map[0]] = one_map[1]
+			else:
+				map_dict[one_map[0]] = one_map[1]
 		map_file.close()
 		
 	print("Arraying interaction file and creating lists of proteins and taxids.")
@@ -1223,7 +1240,7 @@ def describe_consensus(consensusfile):
 #Check for eggNOG mapping file and get if needed
 mapping_file_list = glob.glob('uniprot*.tsv')
 if len(mapping_file_list) >2:
-	sys.exit("Only expected two Uniprot to NOG mapping files. Check for duplicates.")
+	sys.exit("Only expected two Uniprot to NOG mapping files at most. Check for duplicates.")
 if len(mapping_file_list) <2:
 	print("No eggNOG mapping files found or they're incomplete. Retrieving them.")
 	get_eggnog_maps()
