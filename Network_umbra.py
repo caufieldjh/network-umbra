@@ -268,15 +268,21 @@ def build_meta(mapping_file_list, ppi_data):
 			one_map = ((line.rstrip()).split("\t"))
 			if use_main_map == True:	#The main uniprot map file has a different format than the others
 				try:
-					if one_map[2] != "-":
+					if one_map[2] != "-" and one_map[2] != "":
 						map_dict[one_map[0]] = one_map[2]
-				except IndexError:
-					if one_map[1] != "-":
+					elif one_map[1] != "-" and one_map[1] != "":	#There may be something in other columns, so column 2's entry may just be ""
+						#So we have to check this way too
+						map_dict[one_map[0]] = one_map[1]
+				except IndexError:		#If there is only something in the second column, the rest of the line is empty and throws IndexError
+					if one_map[1] != "-" and one_map[1] != "":
 						map_dict[one_map[0]] = one_map[1]
 			else:
 				map_dict[one_map[0]] = one_map[1]
 		map_file.close()
-		
+	
+	#for item in map_dict:
+	#	print(item + "\t" + map_dict[item])
+	
 	print("Arraying interaction file and creating lists of proteins and taxids.")
 	
 	for line in interaction_file:
