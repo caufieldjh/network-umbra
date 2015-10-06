@@ -3,9 +3,10 @@
 '''
 Predicts interactions in a protein interaction network based off a meta-interactome network.
 Uses eggNOG v.4.1.
+Written for Python 2.7. Not tested with Python 3.
 
 REQUIRES: Biopython 1.65 or more recent
-			Also needs ~600 MB of available disk space to accomodate data files and output
+			Also needs at least 5 GB of available disk space to accomodate data files and output
 			More space may be necessary for proteome files.
 
 INPUT: Downloads all available protein-protein interactions for bacteria from IntAct.
@@ -53,7 +54,12 @@ DescB		Description of the second interactor
 			
 'subgraph_expansion_[FuncCat]_nodes_[date].txt'
 			Annotation file for the nodes in the expanded subgraphs.
-
+			
+'interactome_statistics_[date].txt'
+			Counts of interactors - proteins and OGs - participating in predicted interactomes.
+			Contains the following counts per input proteome:
+			Name, taxid, Proteins, ProteinsNotInPPI, ProteinsWithExpPPI, ProteinsWithPredPPI, 
+			UniqueOGs, OGsWithoutInteractions, OGsWithExpInt, OGsWithPredInt, ExpOGIntNet, OGIntInPredNet
 
 Uses PSIQUIC service to retrieve IntAct data - see https://github.com/micommunity/psicquic
 
@@ -76,36 +82,24 @@ Verifies that self-interactions aren't counted incorrectly.
 Subgraph expansion and filtering module is complete.
 Can provide contribution counts for each taxid in the consensus network.
 Basic interactome prediction (based on consensus) is complete. Will download proteomes from Uniprot on request.
-Added unique proteins to predicted interactome output...but the counts seem far too small. 
+Added unique proteins to predicted interactome output.
+Output statistics about predicted networks after building them.
+
 
 IN PROGRESS:
-*Are priorities
+* <- Are priorities
 
-**Need to verify consensus interaction counts. Should be correct now, though.
-**Need to re-verify subgraph expansion output and interactome prediction results with new consensus output.
+* The mapping files used here are actually those used by Uniprot - should use the main ID conversion file instead
+	as it's what eggNOG uses internally. 
+	Will need to: 
+	1. Download id conversion file and decompress
+	2. Download NOG and bactNOG member files and decompress. Combine into single file?
+	3. Filter conversion file to just UPIDs
+	4. Use member files to set up UPID to OG map file
 
-**Need to trace back interactome predictions to specific proteins, add to predicted interactome, and get counts.
-	This work is in progress but output needs to be verified.
-**For a group of interactome predictions, get counts for the following:
-	(For Fig 4A)
-	1. Unique proteins in proteome
-	2. Proteins not in PPI
-	3. Proteins with experimental PPI and direct predictions (either the original PPI, or PPI from shared OGs in the same species)
-	4. Proteins with predicted PPI (interactions originally seen in different species)
-	
-	(For Fig 4B)
-	5. Unique OGs in proteome
-	6. OGs without interactions
-	7. OGs with experimental interactions (see item 3)
-	8. OGs with predicted interactions (see item 4)
-	
-	(For Fig 4C)
-	9. Unique OG interactions in the predicted network
-	10. Unique experimental OG interactions 
+* Want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
 
-	Also want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
-
-*Do interactome prediction for a given proteome. Download proteome on request.
+Evaluate predictions on the basis of OG members (large OGs have less predictive power, at least without sequence alignments)
 Use protein and species count from eggNOG (it's in the annotation file).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
 	Or at least get interaction frequencies by FuncCat (as in filtering goal above)
@@ -124,41 +118,111 @@ Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
 
-
 #Functions
 
 def get_eggnog_maps(): 
-	#Download and unzip the eggNOG Uniprot ID maps
-	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/id_mappings/uniprot/"
-	bactmapfilename = "uniprot-15-May-2015.Bacteria.tsv.gz"	#The Bacteria-specific mapping file
-	lucamapfilename = "uniprot-15-May-2015.LUCA.tsv.gz"	#The LUCA mapping file - more generic NOGs
+	#Download and unzip the eggNOG ID conversion file 
+	#Filters file to just Uniprot IDs; the resulting file is the map file.
+	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/"
+	convfilename = "eggnog4.protein_id_conversion.tsv.gz "	#File contains ALL database identifiers and corresponding proteins
 	
-	for mapfilename in [bactmapfilename, lucamapfilename]:
-		mapfilepath = baseURL + mapfilename
-		outfilepath = mapfilename[0:-3]
-		if os.path.isfile(mapfilename): 
-			print("Found compressed map file on disk: " + mapfilename)
+	convfilepath = baseURL + convfilename
+	outfilepath = convfilename[0:-3]
+	if os.path.isfile(convfilename): 
+		print("Found compressed ID conversion file on disk: " + convfilename)
+		decompress_convfile = 1
+	if os.path.isfile(outfilepath): 
+		print("Found ID conversion file on disk: " + outfilepath)
+		decompress_convfile = 0
+	else:
+		response = urllib2.urlopen(convfilepath)
+		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
+		print("Downloading from " + convfilepath)
+		compressed_file = open(os.path.basename(convfilename), "w+b") #Start local compressed file
+		chunk = 1048576
+		while 1:
+			data = (response.read(chunk)) #Read one Mb at a time
+			compressed_file.write(data)
+			if not data:
+				print("\n" + convfilename + " file download complete.")
+				compressed_file.close()
+				break
+			sys.stdout.write(".")
+		decompress_convfile = 1
+		
+	if decompress_convfile == 1:
+		print("Decompressing map file. Lines written, in millions:")
+		#Done in chunks since it's a large file
+		with gzip.open(convfilename) as infile: #Open that compressed file, read and write to uncompressed file
+			outfile = open(outfilepath, "w+b")
+			linecount = 0
+			for line in infile:
+				outfile.write(line)
+				linecount = linecount +1
+				if linecount % 100000 == 0:
+						sys.stdout.write(".")
+				if linecount % 1000000 == 0:
+						sys.stdout.write(str(linecount/1000000))
+			infile.close()
+		outfile.close()
+	
+	#Download and decompress member NOG files (2 of them)
+	nogURL = baseURL + "data/NOG/"
+	nogfilename = "NOG.members.tsv.gz"
+	bactnogURL = baseURL + "data/bactNOG/"
+	bactnogfilename = "bactNOG.members.tsv.gz" 
+	all_nog_locations = [[nogURL, nogfilename], [bactnogURL, bactnogfilename]]
+	
+	for location in all_nog_locations:
+		baseurl = location[0]
+		memberfilename = location[1]
+		memberfilepath = baseURL + memberfilename
+		outfilepath = memberfilename[0:-3]
+		if os.path.isfile(memberfilename): 
+			print("\nFound compressed NOG membership file on disk: " + memberfilename)
+			decompress_memberfile = 1
+		if os.path.isfile(outfilepath): 
+			print("\nFound NOG membership file on disk: " + outfilepath)
+			decompress_memberfile = 0
 		else:
-			response = urllib2.urlopen(mapfilepath)
-			print("Downloading from " + mapfilepath)
-			compressed_file = open(os.path.basename(mapfilename), "w+b") #Start local compressed file
+			response = urllib2.urlopen(convfilepath)
+			print("\nDownloading NOG membership file - this may take some time.")
+			print("Downloading from " + memberfilepath)
+			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
 			chunk = 1048576
 			while 1:
 				data = (response.read(chunk)) #Read one Mb at a time
 				compressed_file.write(data)
 				if not data:
-					print("\n" + mapfilename + " file download complete.")
+					print("\n" + memberfilename + " file download complete.")
 					compressed_file.close()
 					break
 				sys.stdout.write(".")
+			decompress_memberfile = 1
 			
-		print("Decompressing map file.")
-		with gzip.open(mapfilename) as infile: #Open that compressed file, read and write to uncompressed file
-			file_content = infile.read()
-			outfile = open(outfilepath, "w+b")
-			outfile.write(file_content)
-			infile.close()
-		outfile.close()
+		if decompress_memberfile == 1:
+			print("Decompressing NOG membership file " + memberfilename)
+			#Done in chunks since it's a large file
+			with gzip.open(memberfilename) as infile: #Open that compressed file, read and write to uncompressed file
+				outfile = open(outfilepath, "w+b")
+				linecount = 0
+				for line in infile:
+					outfile.write(line)
+					linecount = linecount +1
+					if linecount % 100000 == 0:
+						sys.stdout.write(".")
+					if linecount % 1000000 == 0:
+						sys.stdout.write(str(linecount/1000000))
+				infile.close()
+			outfile.close()
+	
+	#Load and filter the ID conversion file as dictionary
+	
+	#Use filtered ID conversion input to map to NOG members
+	
+	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
+	
+	#Clean up by removing compressed files
 	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
@@ -245,6 +309,7 @@ def build_meta(mapping_file_list, ppi_data):
 	
 	print("Building meta-interactome...")
 	print("Setting up protein to OG maps.")
+	#We preferentially use bacteria mapping first
 	for input_map_file in mapping_file_list:
 		try:
 			map_file = open(input_map_file)
@@ -254,7 +319,10 @@ def build_meta(mapping_file_list, ppi_data):
 			one_map = ((line.rstrip()).split("\t"))
 			map_dict[one_map[0]] = one_map[1]
 		map_file.close()
-		
+	
+	#for item in map_dict:
+	#	print(item + "\t" + map_dict[item])
+	
 	print("Arraying interaction file and creating lists of proteins and taxids.")
 	
 	for line in interaction_file:
@@ -754,7 +822,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	while getting_proteomes == 1:
 		get_new_proteomes = raw_input("Get a proteome from Uniprot? (Y/N)\n")
 		if get_new_proteomes in ["Y", "y"]:
-			get_a_proteome()
+			get_a_proteome()	#run get_a_proteome() method
 		else:
 			print("Will now map proteomes to OGs.")
 			break
@@ -827,7 +895,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
 		else:
 			print(taxid_name + "\t\t" + proteome_filename)
-		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]
+		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]	#This is critical as we'll need it shortly
 	
 	#Also retrieve taxid details from the taxid context file.
 	taxid_context_filenames = glob.glob("taxid_context*.txt")
@@ -850,7 +918,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	
 	continue_prediction = raw_input("Predict interactomes for all above? (Y/N)\n")
 	if continue_prediction in ["Y", "y"]:
-		print("Note: work in progress.")
+		print("Predicting interactomes for the above species.")
 	else:
 		return None
 		
@@ -869,6 +937,8 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	metafile.close()
 	
 	#Interactome prediction starts here, iterating through each OG-mapped proteome.
+	interactome_stats = {}	#Uses taxid as key
+	
 	for proteome_filename in proteome_map_list:	#Go through each of the available OG-mapped proteomes
 		print("\nPredicting interactome for " + proteome_filename + ".")
 		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
@@ -940,7 +1010,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		sys.stdout.write(str(exp_ppi_count))
 		
 		print("\nMaking interaction predictions.")
-		#Second pass: make predictions based on OGs.
+		#Second pass: make predictions based on OGs and the consensus interactome.
 		#That is, if two proteins interact, predict all proteins in their two OGs interact.
 		#All experimental interactions should be covered in the consensus, so don't care about species here
 		#Don't need to handle protein vs. protein as we should have seen it in the meta-interactome already
@@ -987,6 +1057,61 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 							sys.stdout.write(str(pred_ppi_count))
 		sys.stdout.write(str(pred_ppi_count))
 		
+		#Finally - get a few more protein and OG counts.
+		#These counts won't be right if we just use the proteome, as PPI may include related species
+		#Isn't a problem for predictions as they're all based off one proteome
+		#But for experimental results we just get every Uniprot ID
+		proteins_in_interactions = []
+		proteins_w_exp_ppi = []
+		proteins_w_pred_ppi = []
+		ogs_in_interactions = []
+		ogs_w_exp_int = []
+		ogs_w_pred_int = []
+		exp_og_int = []
+		pred_og_int = []
+		for interaction in this_pred_interactome_detailed:
+			og_pair = interaction[2:4] 
+			rev_og_pair = [interaction[3], interaction[2]]	#We don't care about interaction direction.
+			if interaction[4] == "Experimental":
+				for protein in interaction[0:2]:
+					if protein not in proteins_w_exp_ppi:
+						proteins_w_exp_ppi.append(protein)
+				for og in og_pair:
+					if og not in ogs_w_exp_int:
+						ogs_w_exp_int.append(og)
+				if og_pair not in exp_og_int and rev_og_pair not in exp_og_int:
+					exp_og_int.append(og_pair)
+			for protein in this_proteome:
+				both_interactors = 0
+				if protein in interaction[0:2] and protein not in proteins_in_interactions:
+					both_interactors = both_interactors +1
+					proteins_in_interactions.append(protein)
+					if interaction[4] == "Predicted" and protein not in proteins_w_pred_ppi:
+						proteins_w_pred_ppi.append(protein)
+				if both_interactors == 2:
+					break
+			for og in this_og_eome:
+				both_interactors = 0
+				if og in interaction[2:4] and og not in ogs_in_interactions:
+					both_interactors = both_interactors +1
+					ogs_in_interactions.append(og)
+					if interaction[4] == "Predicted" and og not in ogs_w_pred_int:
+						ogs_w_pred_int.append(og)
+				if both_interactors == 2:
+					break
+			if og_pair not in exp_og_int and rev_og_pair not in pred_og_int:
+				pred_og_int.append(og_pair)
+					
+		proteins_not_in_interactions = len(this_proteome) - len(proteins_in_interactions)	#Just a count, here
+		ogs_not_in_interactions = len(this_og_eome) - len(ogs_in_interactions)
+		#interactome_stats contains statistics used in batch output. Contains:
+		#Name, taxid, Proteins, ProteinsNotInPPI, ProteinsWithExpPPI, ProteinsWithPredPPI, 
+		#UniqueOGs, OGsWithoutInteractions, OGsWithExpInt, OGsWithPredInt, ExpOGIntNet, OGIntInPredNet
+		interactome_stats[taxid] = [taxid_context[taxid][0], taxid, str(len(this_proteome)), str(proteins_not_in_interactions), 
+									str(len(proteins_w_exp_ppi)), str(len(proteins_w_pred_ppi)), str(len(this_og_eome)),
+									str(ogs_not_in_interactions), str(len(ogs_w_exp_int)), str(len(ogs_w_pred_int)),
+									str(len(exp_og_int)), str(len(pred_og_int))]
+		
 		#This is just for testing.
 		'''
 		for interaction in all_interactions:
@@ -1002,7 +1127,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 					print(this_meta_interaction)
 		'''
 			
-		#Write file.
+		#Write interactome file.
 		for interaction in this_pred_interactome_detailed:
 			pred_interactome_file.write("\t".join(interaction) + "\n")
 		
@@ -1013,6 +1138,27 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		pred_interactome_file.close()
 		os.chdir("..")
 		
+	#Once all the interactome predictions for all proteomes are done, do summary statistics.
+	nowstring = (date.today()).isoformat()
+	multi_inter_stats_file_name = "interactome_statistics_" + nowstring + ".txt"
+	multi_inter_stats_file = open(multi_inter_stats_file_name, "w")
+	os.chdir("predicted_interactomes")
+	interactome_filenames = glob.glob("pred_interactome_*.txt")
+	
+	stats_outlines = []	#This is where the output for each species will go, one interactome per line
+	for filename in interactome_filenames:
+		taxid = ((filename.rstrip(".txt")).split("_"))[2]
+		outline = "\t".join(interactome_stats[taxid]) + "\n"
+		stats_outlines.append(outline)
+		
+	os.chdir("..")
+	#Text header
+	multi_inter_stats_file.write("Species\tTaxid\tProteins\tProteinsNotInPPI\tProteinsWithExpPPI\tProteinsWithPredPPI\t" +
+								"UniqueOGs\tOGsWithoutInteractions\tOGsWithExpInt\tOGsWithPredInt\tOGIntInExpNet\tOGIntInPredNet\n")
+	for outline in stats_outlines:
+		multi_inter_stats_file.write(outline)
+	
+	print("\nWrote summary statistics for these interactomes to " + multi_inter_stats_file_name)
 	print("\nComplete.\n")
 	
 def get_a_proteome():	#Does what it says.	Much more organized than the rest of this since I wrote it a while ago.
@@ -1103,10 +1249,24 @@ def describe_consensus(consensusfile):
 	for line in consensusfile:
 		one_interaction = (line.rstrip()).split("\t")
 		consensus_interactions.append(one_interaction)
+		
+	taxids_and_context = {}
+	taxid_ref_list = glob.glob('taxid_context*.txt')
+	if len(taxid_ref_list) >1:
+		sys.exit("Something went wrong - more than one taxid context file found.")
+	if len(taxid_ref_list) == 0:
+		sys.exit("Something went wrong - no taxid context file found.")
+	taxid_ref_file = open(taxid_ref_list[0])
+	for line in taxid_ref_file:
+		content = ((line.rstrip()).split("\t"))
+		taxids_and_context[content[0]] = [content[1], content[2], content[3]]
+	taxid_ref_file.close()
 	
 	print("Top taxid contributions, in number of consensus interactions corresponding to the taxid.")
+	print("Name\tTaxid\tNumber of interactions")
 	all_taxids = {}	#All taxids AND their counts.
-	for interaction in consensus_interactions:
+	
+	for interaction in consensus_interactions:	#Check each interaction for contributing taxids
 		these_sources = interaction[4].split()
 		for taxid in these_sources:
 			if taxid not in all_taxids:
@@ -1114,25 +1274,24 @@ def describe_consensus(consensusfile):
 			all_taxids[taxid] = all_taxids[taxid] + 1
 
 	sorted_taxids = sorted(all_taxids.items(), key=operator.itemgetter(1), reverse=True)
-	top_ten_taxids = sorted_taxids[0:15]
+	top_taxids = sorted_taxids[0:15]
 	
-	for taxid in top_ten_taxids:
+	for taxid in top_taxids:
 		taxid_only = taxid[0]
-		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-		target_records = Entrez.read(target_handle)
-		taxid_name = target_records[0]["ScientificName"]
-		print(taxid_name + "\t" + taxid[0] + "\t" + str(taxid[1]))
+		taxid_name = taxids_and_context[taxid_only][0]
+		print(taxid_name + "\t" + taxid_only + "\t" + str(taxid[1]))
 			
 #Main
 
 #Check for eggNOG mapping file and get if needed
-mapping_file_list = glob.glob('uniprot*.tsv')
+#Requires downloading several files and building new mapping file from them
+mapping_file_list = glob.glob('uniprot_og_maps*.txt')
 if len(mapping_file_list) >2:
-	sys.exit("Only expected two Uniprot to NOG mapping files. Check for duplicates.")
-if len(mapping_file_list) <2:
-	print("No eggNOG mapping files found or they're incomplete. Retrieving them.")
+	sys.exit("Found more than one mapping file. Check for duplicates.")
+if len(mapping_file_list) == 0:
+	print("No eggNOG mapping files found or they're incomplete. Rebuilding them.")
 	get_eggnog_maps()
-	mapping_file_list = glob.glob('uniprot*.tsv')
+	mapping_file_list = glob.glob('uniprot_og_maps*.txt')
 	
 #Check for eggNOG annotation file and get if needed
 annotation_file_list = glob.glob('*annotations.tsv')
