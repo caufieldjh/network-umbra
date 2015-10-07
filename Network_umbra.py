@@ -130,10 +130,14 @@ def get_eggnog_maps():
 	outfilepath = convfilename[0:-3]
 	if os.path.isfile(convfilename): 
 		print("Found compressed ID conversion file on disk: " + convfilename)
+		decompress_convfile = 1
+	if os.path.isfile(outfilepath): 
+		print("Found ID conversion file on disk: " + outfilepath)
+		decompress_convfile = 0
 	else:
-		response = urllib2.urlopen(convfilepath)
 		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
 		print("Downloading from " + convfilepath)
+		response = urllib2.urlopen(convfilepath)
 		compressed_file = open(os.path.basename(convfilename), "w+b") #Start local compressed file
 		chunk = 1048576
 		while 1:
@@ -144,14 +148,24 @@ def get_eggnog_maps():
 				compressed_file.close()
 				break
 			sys.stdout.write(".")
+		decompress_convfile = 1
 		
-	print("Decompressing map file.")
-	with gzip.open(convfilename) as infile: #Open that compressed file, read and write to uncompressed file
-		file_content = infile.read()
-		outfile = open(outfilepath, "w+b")
-		outfile.write(file_content)
-		infile.close()
-	outfile.close()
+	if decompress_convfile == 1:
+		print("Decompressing map file. Lines written, in millions:")
+		#Done in chunks since it's a large file
+		with gzip.open(convfilename) as infile: #Open that compressed file, read and write to uncompressed file
+			outfile = open(outfilepath, "w+b")
+			linecount = 0
+			for line in infile:
+				outfile.write(line)
+				linecount = linecount +1
+				if linecount % 100000 == 0:
+						sys.stdout.write(".")
+				if linecount % 1000000 == 0:
+						sys.stdout.write(str(linecount/1000000))
+			infile.close()
+		newconvfilename = outfilepath
+		outfile.close()
 	
 	#Download and decompress member NOG files (2 of them)
 	nogURL = baseURL + "data/NOG/"
@@ -161,16 +175,20 @@ def get_eggnog_maps():
 	all_nog_locations = [[nogURL, nogfilename], [bactnogURL, bactnogfilename]]
 	
 	for location in all_nog_locations:
-		baseurl = location[0]
+		baseURL = location[0]
 		memberfilename = location[1]
 		memberfilepath = baseURL + memberfilename
 		outfilepath = memberfilename[0:-3]
 		if os.path.isfile(memberfilename): 
-			print("Found compressed NOG membership file on disk: " + memberfilename)
+			print("\nFound compressed NOG membership file on disk: " + memberfilename)
+			decompress_memberfile = 1
+		if os.path.isfile(outfilepath): 
+			print("\nFound NOG membership file on disk: " + outfilepath)
+			decompress_memberfile = 0
 		else:
-			response = urllib2.urlopen(convfilepath)
-			print("Downloading NOG membership file - this may take some time.")
+			print("\nDownloading NOG membership file - this may take some time.")
 			print("Downloading from " + memberfilepath)
+			response = urllib2.urlopen(memberfilepath)
 			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
 			chunk = 1048576
 			while 1:
@@ -181,20 +199,91 @@ def get_eggnog_maps():
 					compressed_file.close()
 					break
 				sys.stdout.write(".")
+			decompress_memberfile = 1
 			
-		print("Decompressing NOG membership file " + memberfilename)
-		with gzip.open(memberfilename) as infile: #Open that compressed file, read and write to uncompressed file
-			file_content = infile.read()
-			outfile = open(outfilepath, "w+b")
-			outfile.write(file_content)
-			infile.close()
-		outfile.close()
+		if decompress_memberfile == 1:
+			print("Decompressing NOG membership file " + memberfilename)
+			#Done in chunks since it's a large file
+			with gzip.open(memberfilename) as infile: #Open that compressed file, read and write to uncompressed file
+				outfile = open(outfilepath, "w+b")
+				linecount = 0
+				for line in infile:
+					outfile.write(line)
+					linecount = linecount +1
+					if linecount % 100000 == 0:
+						sys.stdout.write(".")
+					if linecount % 1000000 == 0:
+						sys.stdout.write(str(linecount/1000000))
+				infile.close()
+			outfile.close()
+			
+	#Clean up by removing compressed files
+	print("\nRemoving compressed files.")
+	all_compressed_files = [convfilename, nogfilename, bactnogfilename]
+	for filename in all_compressed_files:
+		if os.path.isfile(filename):
+			os.remove(filename)
 	
 	#Load and filter the ID conversion file as dictionary
-	
+	print("Parsing ID conversion file. Lines read, in millions:")
+	with open(convfilename[0:-3]) as infile:
+		id_dict = {}	#Dictionary of eggNOG protein IDs with database IDs as keys
+		#Gets filtered down to relevant database IDs (i.e., Uniprot IDs)
+		linecount = 0
+		for line in infile:
+			linecount = linecount +1
+			line_raw = ((line.rstrip()).split("\t"))	#Protein IDs are split for some reason; merge them
+			one_id_set = [line_raw[0] + "." + line_raw[1], line_raw[2], line_raw[3]]
+			if "UniProt_AC" in one_id_set[2]:
+				id_dict[one_id_set[1]] = one_id_set[0]
+			if linecount % 100000 == 0:
+				sys.stdout.write(".")
+			if linecount % 1000000 == 0:
+				sys.stdout.write(str(linecount/1000000))
+		infile.close()
+
 	#Use filtered ID conversion input to map to NOG members
+	print("\nReading NOG membership files.")
+	all_nog_filenames = [bactnogfilename[0:-3], nogfilename[0:-3]]
+	nog_members = {}	#Dictionary of NOG ids with protein IDs as keys (need to split entries for each)
+	nog_count = 0
+	for filename in all_nog_filenames:
+		print("Reading from " + filename)
+		with open(filename) as infile:
+			for line in infile:
+				nog_count = nog_count +1
+				line_raw = ((line.rstrip()).split("\t"))
+				nog_id = line_raw[1]
+				line_members = line_raw[5].split(",")
+				for protein_id in line_members:
+					nog_members[protein_id] = nog_id
+			infile.close()
 	
+	upids_length = str(len(id_dict))
+	nogs_length = str(nog_count)
+	proteins_length = str(len(nog_members))
+	
+	print("Mapping " + upids_length + " Uniprot IDs to " + nogs_length + " NOGs through " + proteins_length +  " eggNOG protein IDs:")
+	upid_to_NOG = {}	#Conversion dictionary. Values are OGs, keys are UPIDs.
+	mapped_count = 0	#upids mapped to nogs.
+	for upid in id_dict:
+		if id_dict[upid] in nog_members:
+			upid_to_NOG[upid] = nog_members[id_dict[upid]]
+			mapped_count = mapped_count +1
+			if mapped_count % 100000 == 0:
+				sys.stdout.write(".")
+			if mapped_count % 1000000 == 0:
+				sys.stdout.write(str(mapped_count/1000000))
+		
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
+	print("Writing map file.")
+	nowstring = (date.today()).isoformat()
+	mapfilename = "uniprot_og_maps_" + nowstring + ".txt"
+	mapfile = open(mapfilename, "w+b")
+	for mapping in upid_to_NOG:
+		mapfile.write(mapping + "\t" + upid_to_NOG[mapping] + "\n")	#Each line is a uniprot ID and an OG id
+	mapfile.close() 
+	
 	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
@@ -257,6 +346,11 @@ def get_eggnog_annotations():
 			outfile.write(file_content)
 			infile.close()
 		outfile.close()
+		
+	print("\nRemoving compressed files.")
+	all_compressed_files = [bactannfilename, lucaannfilename]
+	for filename in all_compressed_files:
+		os.remove(filename)
 	
 def build_meta(mapping_file_list, ppi_data): 
 	#Sets up the meta-interactome network.
@@ -1282,10 +1376,10 @@ ppi_data_filename = ""
 if len(meta_file_list) >1:
 	sys.exit("More than one meta-interactome found. Please use just one at a time.")
 if len(meta_file_list) == 0:
-	print("No meta-interactome found.")
+	print("\nNo meta-interactome found.")
 	while ppi_data_filename == "":
 		ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
-		"Enter:\n R for retrieval\n L for local file, or\n M for multiple inputs.\n")
+		"Enter:\n R for retrieval\n L for local file, \n M for multiple inputs, \n or X to quit.\n")
 		if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
 			#May not include all PPI available through HTTP IntAct interface.
 			ppi_data_filename = "protein-interactions.tab"
@@ -1326,6 +1420,8 @@ if len(meta_file_list) == 0:
 				print(item)
 			print("Merging into a single file.")
 			ppi_data_filename = merge_data(interaction_file_list)
+		if ppi_data_option in ["X", "x"]:
+			sys.exit("Exiting...")
 
 #Load meta-interactome network file
 #Needs to be built first.
