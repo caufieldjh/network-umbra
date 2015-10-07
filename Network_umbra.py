@@ -164,6 +164,7 @@ def get_eggnog_maps():
 				if linecount % 1000000 == 0:
 						sys.stdout.write(str(linecount/1000000))
 			infile.close()
+		newconvfilename = outfilepath
 		outfile.close()
 	
 	#Download and decompress member NOG files (2 of them)
@@ -220,13 +221,68 @@ def get_eggnog_maps():
 	print("\nRemoving compressed files.")
 	all_compressed_files = [convfilename, nogfilename, bactnogfilename]
 	for filename in all_compressed_files:
-		os.remove(filename)
+		if os.path.isfile(filename):
+			os.remove(filename)
 	
 	#Load and filter the ID conversion file as dictionary
-	
+	print("Parsing ID conversion file. Lines read, in millions:")
+	with open(convfilename[0:-3]) as infile:
+		id_dict = {}	#Dictionary of eggNOG protein IDs with database IDs as keys
+		#Gets filtered down to relevant database IDs (i.e., Uniprot IDs)
+		linecount = 0
+		for line in infile:
+			linecount = linecount +1
+			line_raw = ((line.rstrip()).split("\t"))	#Protein IDs are split for some reason; merge them
+			one_id_set = [line_raw[0] + "." + line_raw[1], line_raw[2], line_raw[3]]
+			if "UniProt_AC" in one_id_set[2]:
+				id_dict[one_id_set[1]] = one_id_set[0]
+			if linecount % 100000 == 0:
+				sys.stdout.write(".")
+			if linecount % 1000000 == 0:
+				sys.stdout.write(str(linecount/1000000))
+		infile.close()
+
 	#Use filtered ID conversion input to map to NOG members
+	print("\nReading NOG membership files.")
+	all_nog_filenames = [bactnogfilename[0:-3], nogfilename[0:-3]]
+	nog_members = {}	#Dictionary of all NOG members with NOG IDs as keys
+	for filename in all_nog_filenames:
+		print("Reading from " + filename)
+		with open(filename) as infile:
+			linecount = 0
+			for line in infile:
+				line_raw = ((line.rstrip()).split("\t"))
+				line_members = line_raw[5].split(",")
+				one_id_set = [line_raw[1], line_members]
+				nog_members[one_id_set[0]] = one_id_set[1]
+			infile.close()
 	
+	upids_length = str(len(id_dict))
+	nogs_length = str(len(nog_members))
+	print("Mapping " + upids_length + " Uniprot IDs to " + nogs_length + " NOGs through eggNOG IDs:")
+	upid_to_NOG = {}	#Conversion dictionary. Values are OGs, keys are UPIDs.
+	mapped_count = 0	#upids mapped to nogs.
+	#This is very slow due to the size of the two dictionaries. Is there a faster way?
+	for upid in id_dict:
+		for nog in nog_members:
+			if id_dict[upid] in nog_members[nog]:
+				upid_to_NOG[upid] = nog
+				mapped_count = mapped_count +1
+				if mapped_count % 100 == 0:
+					sys.stdout.write(".")
+				if mapped_count % 1000 == 0:
+					sys.stdout.write(str(mapped_count))
+				break
+			
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
+	print("Writing map file.")
+	nowstring = (date.today()).isoformat()
+	mapfilename = "uniprot_og_maps_" + nowstring + ".txt"
+	mapfile = open(mapfilename, "w+b")
+	for mapping in upid_to_NOG:
+		mapfile.write(mapping + "\t" + upid_to_NOG[mapping] + "\n")
+	mapfile.close() 
+	
 	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
@@ -1319,7 +1375,7 @@ ppi_data_filename = ""
 if len(meta_file_list) >1:
 	sys.exit("More than one meta-interactome found. Please use just one at a time.")
 if len(meta_file_list) == 0:
-	print("No meta-interactome found.")
+	print("\nNo meta-interactome found.")
 	while ppi_data_filename == "":
 		ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
 		"Enter:\n R for retrieval\n L for local file, or\n M for multiple inputs.\n")
