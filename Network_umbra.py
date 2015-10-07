@@ -123,6 +123,8 @@ Entrez.email = 'caufieldjh@vcu.edu'
 def get_eggnog_maps(): 
 	#Download and unzip the eggNOG ID conversion file 
 	#Filters file to just Uniprot IDs; the resulting file is the map file.
+	#One Uniprot ID may correspond to multiple OGs - e.g. COG1234,COG3810,COG9313. 
+	#these cases are considered OGs in their own right as this may indicate a pattern of conserved sequences on its own 
 	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/"
 	convfilename = "eggnog4.protein_id_conversion.tsv.gz "	#File contains ALL database identifiers and corresponding proteins
 	
@@ -244,10 +246,11 @@ def get_eggnog_maps():
 
 	#Use filtered ID conversion input to map to NOG members
 	print("\nReading NOG membership files.")
-	all_nog_filenames = [bactnogfilename[0:-3], nogfilename[0:-3]]
+	all_nog_filenames = [nogfilename[0:-3], bactnogfilename[0:-3]]
 	nog_members = {}	#Dictionary of NOG ids with protein IDs as keys (need to split entries for each)
 	nog_count = 0
 	for filename in all_nog_filenames:
+		temp_nog_members = {}	#We will have duplicates within each set but don't want to lose the information.
 		print("Reading from " + filename)
 		with open(filename) as infile:
 			for line in infile:
@@ -255,9 +258,13 @@ def get_eggnog_maps():
 				line_raw = ((line.rstrip()).split("\t"))
 				nog_id = line_raw[1]
 				line_members = line_raw[5].split(",")
-				for protein_id in line_members:
-					nog_members[protein_id] = nog_id
+				for protein_id in line_members:			#The same protein could be in more than one OG at the same level
+					if protein_id in temp_nog_members:
+						temp_nog_members[protein_id] = temp_nog_members[protein_id] + "," + nog_id
+					else:
+						temp_nog_members[protein_id] = nog_id
 			infile.close()
+		nog_members.update(temp_nog_members)
 	
 	upids_length = str(len(id_dict))
 	nogs_length = str(nog_count)
