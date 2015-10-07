@@ -245,6 +245,7 @@ def get_eggnog_maps():
 	#Use filtered ID conversion input to map to NOG members
 	print("\nReading NOG membership files.")
 	all_nog_filenames = [bactnogfilename[0:-3], nogfilename[0:-3]]
+<<<<<<< HEAD
 	nog_members = {}	#Dictionary of NOG ids with protein IDs as keys (need to split entries for each)
 	nog_count = 0
 	for filename in all_nog_filenames:
@@ -275,13 +276,48 @@ def get_eggnog_maps():
 			if mapped_count % 1000000 == 0:
 				sys.stdout.write(str(mapped_count/1000000))
 		
+=======
+	nog_members = {}	#Dictionary of all NOG members with NOG IDs as keys
+	for filename in all_nog_filenames:
+		print("Reading from " + filename)
+		with open(filename) as infile:
+			linecount = 0
+			for line in infile:
+				line_raw = ((line.rstrip()).split("\t"))
+				line_members = line_raw[5].split(",")
+				one_id_set = [line_raw[1], line_members]
+				nog_members[one_id_set[0]] = one_id_set[1]
+			infile.close()
+	
+	upids_length = str(len(id_dict))
+	nogs_length = str(len(nog_members))
+	print("Mapping " + upids_length + " Uniprot IDs to " + nogs_length + " NOGs through eggNOG IDs:")
+	upid_to_NOG = {}	#Conversion dictionary. Values are OGs, keys are UPIDs.
+	mapped_count = 0	#upids mapped to nogs.
+	#This is very slow due to the size of the two dictionaries. Is there a faster way?
+	for upid in id_dict:
+		for nog in nog_members:
+			if id_dict[upid] in nog_members[nog]:
+				upid_to_NOG[upid] = nog
+				mapped_count = mapped_count +1
+				if mapped_count % 100 == 0:
+					sys.stdout.write(".")
+				if mapped_count % 1000 == 0:
+					sys.stdout.write(str(mapped_count))
+				break
+			
+>>>>>>> origin/master
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
 	print("Writing map file.")
 	nowstring = (date.today()).isoformat()
 	mapfilename = "uniprot_og_maps_" + nowstring + ".txt"
 	mapfile = open(mapfilename, "w+b")
 	for mapping in upid_to_NOG:
+<<<<<<< HEAD
 		mapfile.write(mapping + "\t" + upid_to_NOG[mapping] + "\n")	#Each line is a uniprot ID and an OG id
+=======
+		mapfile.write(mapping + "\t" + upid_to_NOG[mapping] + "\n")
+>>>>>>> origin/master
 	mapfile.close() 
 	
 	
