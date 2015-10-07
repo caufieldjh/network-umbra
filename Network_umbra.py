@@ -135,9 +135,9 @@ def get_eggnog_maps():
 		print("Found ID conversion file on disk: " + outfilepath)
 		decompress_convfile = 0
 	else:
-		response = urllib2.urlopen(convfilepath)
 		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
 		print("Downloading from " + convfilepath)
+		response = urllib2.urlopen(convfilepath)
 		compressed_file = open(os.path.basename(convfilename), "w+b") #Start local compressed file
 		chunk = 1048576
 		while 1:
@@ -174,7 +174,7 @@ def get_eggnog_maps():
 	all_nog_locations = [[nogURL, nogfilename], [bactnogURL, bactnogfilename]]
 	
 	for location in all_nog_locations:
-		baseurl = location[0]
+		baseURL = location[0]
 		memberfilename = location[1]
 		memberfilepath = baseURL + memberfilename
 		outfilepath = memberfilename[0:-3]
@@ -185,9 +185,9 @@ def get_eggnog_maps():
 			print("\nFound NOG membership file on disk: " + outfilepath)
 			decompress_memberfile = 0
 		else:
-			response = urllib2.urlopen(convfilepath)
 			print("\nDownloading NOG membership file - this may take some time.")
 			print("Downloading from " + memberfilepath)
+			response = urllib2.urlopen(memberfilepath)
 			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
 			chunk = 1048576
 			while 1:
@@ -215,14 +215,18 @@ def get_eggnog_maps():
 						sys.stdout.write(str(linecount/1000000))
 				infile.close()
 			outfile.close()
+			
+	#Clean up by removing compressed files
+	print("\nRemoving compressed files.")
+	all_compressed_files = [convfilename, nogfilename, bactnogfilename]
+	for filename in all_compressed_files:
+		os.remove(filename)
 	
 	#Load and filter the ID conversion file as dictionary
 	
 	#Use filtered ID conversion input to map to NOG members
 	
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
-	
-	#Clean up by removing compressed files
 	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
@@ -285,6 +289,11 @@ def get_eggnog_annotations():
 			outfile.write(file_content)
 			infile.close()
 		outfile.close()
+		
+	print("\nRemoving compressed files.")
+	all_compressed_files = [bactannfilename, lucaannfilename]
+	for filename in all_compressed_files:
+		os.remove(filename)
 	
 def build_meta(mapping_file_list, ppi_data): 
 	#Sets up the meta-interactome network.
