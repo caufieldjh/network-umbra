@@ -769,6 +769,7 @@ def subset_expansion(metafile, consensusfile):
 	protein_annotations = {}	#Annotations (from IntAct) for unique proteins. No FuncCats here.
 	
 	print("Filtering consensus interactors by function.")
+	consensusfile.seek(0)	#In case we've been using the file already
 	for line in consensusfile:	#Filter interactors by FuncCat
 		one_consensus_interaction = ((line.rstrip()).split("\t"))
 		consensus_interactions.append(one_consensus_interaction)
