@@ -84,20 +84,12 @@ Can provide contribution counts for each taxid in the consensus network.
 Basic interactome prediction (based on consensus) is complete. Will download proteomes from Uniprot on request.
 Added unique proteins to predicted interactome output.
 Output statistics about predicted networks after building them.
-
+The main ID conversion file is now used in lieu of the Uniprot-specific flat file.
 
 IN PROGRESS:
 * <- Are priorities
 
-* The mapping files used here are actually those used by Uniprot - should use the main ID conversion file instead
-	as it's what eggNOG uses internally. 
-	Will need to: 
-	1. Download id conversion file and decompress
-	2. Download NOG and bactNOG member files and decompress. Combine into single file?
-	3. Filter conversion file to just UPIDs
-	4. Use member files to set up UPID to OG map file
-
-* Want to know total count of PPI in predicted interactome vs. count of unique proteins, per species
+*Allow viral OGs to be used in building the meta-interactome, if requested
 
 Evaluate predictions on the basis of OG members (large OGs have less predictive power, at least without sequence alignments)
 Use protein and species count from eggNOG (it's in the annotation file).
@@ -117,6 +109,11 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
+useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
+					#Also requires the viral OGs to be downloaded and added.
+					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
+					
+useNonRefProteomes = False	#Option to search non-reference Uniprot proteomes in the interactome prediction module
 
 #Functions
 
@@ -175,6 +172,11 @@ def get_eggnog_maps():
 	bactnogURL = baseURL + "data/bactNOG/"
 	bactnogfilename = "bactNOG.members.tsv.gz" 
 	all_nog_locations = [[nogURL, nogfilename], [bactnogURL, bactnogfilename]]
+	
+	if useViruses == True:
+		virnogURL = baseURL + "data/viruses/Viruses/"
+		virnogfilename = "Viruses.members.tsv.gz"
+		all_nog_locations.append([virnogURL, virnogfilename])
 	
 	for location in all_nog_locations:
 		baseURL = location[0]
@@ -324,9 +326,14 @@ def get_eggnog_annotations():
 	baseURLs = ["http://eggnogdb.embl.de/download/latest/data/bactNOG/", "http://eggnogdb.embl.de/download/latest/data/NOG/"]
 	bactannfilename = "bactNOG.annotations.tsv.gz"	#The annotations for bacteria-specific NOGs
 	lucaannfilename = "NOG.annotations.tsv.gz"	#The annotations for other NOGs, but not bacteria-specific NOGs
+	annfilenames = [bactannfilename, lucaannfilename]
+	
+	if useViruses == True:
+		baseURLs.append("http://eggnogdb.embl.de/download/latest/data/viruses/Viruses/")
+		annfilenames.append("Viruses.annotations.tsv.gz")
 	
 	this_url = 0
-	for annfilename in [bactannfilename, lucaannfilename]:
+	for annfilename in annfilenames:
 		annfilepath = baseURLs[this_url] + annfilename
 		this_url = this_url +1
 		outfilepath = annfilename[0:-3]
@@ -372,7 +379,7 @@ def build_meta(mapping_file_list, ppi_data):
 	taxid_context_file = open(taxid_context_filename, "w")
 	
 	all_taxids = []
-	all_filtered_taxids = []	#Will remove non-bacterial taxids
+	all_filtered_taxids = []	#Will remove non-bacterial taxids, unless useViruses is on
 	map_dict = {}	#Uniprot ID to OG dictionary for ALL IDs
 	interaction_file = open(ppi_data)
 	interaction_array = []
@@ -419,7 +426,10 @@ def build_meta(mapping_file_list, ppi_data):
 		taxid_name = target_records[0]["ScientificName"]
 		taxid_parent = target_records[0]["ParentTaxId"]
 		taxid_division = target_records[0]["Division"]
-		if taxid_division == "Bacteria":	#Restrict the set to bacteria!
+		taxid_filter = ["Bacteria"]
+		if useViruses == True:
+			taxid_filter.append("Viruses")
+		if taxid_division in taxid_filter:	#Restrict the set to bacteria, unless useViruses is on
 			taxid_species[taxid] = [taxid_name, taxid_parent, taxid_division]
 			taxid_context_file.write(str(taxid) + "\t" + "\t".join(taxid_species[taxid])+ "\n")
 			if taxid not in all_filtered_taxids:
@@ -437,7 +447,7 @@ def build_meta(mapping_file_list, ppi_data):
 		interaction_ok = 1
 		for taxid in [interaction[9], interaction[10]]:
 			taxid = (((((taxid.split("|"))[0]).lstrip("taxid:")).split("("))[0])
-			if taxid not in all_filtered_taxids:	#This is where the non-bacterial interactions get removed
+			if taxid not in all_filtered_taxids:	#This is where the non-bacterial (and non-viral, if useViruses is on) interactions get removed
 				interaction_ok = 0	#Ensure the interaction won't be kept later
 				break				#Ignore this interactor and the other in the pair
 		if interaction_ok == 1:	#Don't bother to filter proteins if this didn't pass the first filter
@@ -965,8 +975,10 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 		taxid_name = target_records[0]["ScientificName"]
 		taxid_parent = target_records[0]["ParentTaxId"]
 		taxid_division = target_records[0]["Division"]
-		if taxid_division != "Bacteria":
+		if taxid_division != "Bacteria" and useViruses == False:
 			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
+		if taxid_division == "Viruses" and useViruses == True:
+			print(taxid_name + "\t\t" + proteome_filename + "\tNOTE: This is a viral proteome. Ensure your meta-interactome uses viral proteins.")
 		else:
 			print(taxid_name + "\t\t" + proteome_filename)
 		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]	#This is critical as we'll need it shortly
@@ -1279,8 +1291,12 @@ def get_a_proteome():	#Does what it says.	Much more organized than the rest of t
 
 	#Retrieve proteomes on a query
 	query = (raw_input("Please specify a full or partial species name.\n")).rstrip()
-	search_results_url = get_search_url(query, "reference%3Ayes") #Leave filter as "" to get non-reference proteomes too
+	ref_filter = "reference%3Ayes"
+	if useNonRefProteomes == True:
+		ref_filter = ""
+	search_results_url = get_search_url(query, ref_filter) #Leave filter as "" to get non-reference proteomes too
 								#Other option: taxonomy%3A"Bacteria+%5B2%5D" for just bacteria
+	
 	search_response = requests.get(search_results_url)
 	
 	#Output the query results
