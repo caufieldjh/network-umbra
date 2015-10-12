@@ -423,6 +423,7 @@ def build_meta(mapping_file_list, ppi_data):
 	
 	for taxid in all_taxids:
 		unique_taxid_count = 0
+		print(str(taxid))
 		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
 		target_records = Entrez.read(target_handle)
 		taxid_name = target_records[0]["ScientificName"]
@@ -1424,11 +1425,13 @@ if len(meta_file_list) == 0:
 			except IOError as e:
 				print("I/O error({0}): {1}".format(e.errno, e.strerror))
 		if ppi_data_option in ["L", "l"]:	#Uses a local file, usually a downloaded IntAct PPI set, in PSI-MI Tab27 format
+			print("Will use single local file. Note that it should be in PSI-MI TAB 2.7 format and have no header row.")
 			ppi_data_filename = raw_input("Please provide local filename.\n")
 			interaction_file_list = glob.glob(ppi_data_filename)
 			if len(interaction_file_list) == 0:
 				sys.exit("Can't find a file with that filename.")	
 		if ppi_data_option in ["M", "m"]:	#Uses multiple local files in PSI-MI Tab27 format
+			print("Will append multiple local files. Note that each should be in PSI-MI TAB 2.7 format and have no header row.")
 			adding_files = 1
 			interaction_file_list = []
 			while adding_files:
