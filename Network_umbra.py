@@ -1387,9 +1387,12 @@ if len(mapping_file_list) == 0:
 	
 #Check for eggNOG annotation file and get if needed
 annotation_file_list = glob.glob('*annotations.tsv')
-if len(annotation_file_list) >2:
-	sys.exit("Only expected two eggNOG annotation files. Check for duplicates.")
-if len(annotation_file_list) <2:
+expected_filecount = 2
+if useViruses == True:
+	expected_filecount = 3
+if len(annotation_file_list) > expected_filecount:
+	sys.exit("Found more eggNOG annotation files than expected. Check for duplicates.")
+if len(annotation_file_list) < expected_filecount:
 	print("No eggNOG annotation files found or they're incomplete. Retrieving them.")
 	get_eggnog_annotations()
 	annotation_file_list = glob.glob('*annotations.tsv')
