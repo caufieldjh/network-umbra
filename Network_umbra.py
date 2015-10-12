@@ -86,13 +86,13 @@ Added unique proteins to predicted interactome output.
 Output statistics about predicted networks after building them.
 The main ID conversion file is now used in lieu of the Uniprot-specific flat file.
 Viral proteins can now be used as long as the useViruses option is on (though host vs. virus interactions are still filtered out)
-	Though phage proteins don't seem to get mapped to NOGs - even in cases like T7 (taxid 10760).
-	Are they in the eggNOG maps?
+	Phage proteins won't work very well right now as the eggNOG viral NOGs don't include very many phage proteins 
+	(e.g. just 37 out of 66 lambda proteins and that's one of the phages with better coverage)
+	But there are *some* phage proteins in NOGs - they may just not be in the eggNOG protein_id_conversion file
 
 IN PROGRESS:
 * <- Are priorities
 
-*See line ~444 - need to expand filter to more than just Phages but need to know what the taxonomy designation is
 *Enable host vs. virus protein interactions to be used - should still depend on the useViruses option
 	Can we easily distinguish between host vs. virus (taxidA vs. taxidB) and just two different unrelated taxids?
 
@@ -427,21 +427,23 @@ def build_meta(mapping_file_list, ppi_data):
 	print("Finding details for interactor taxids. This will take some time.")
 	
 	for taxid in all_taxids:
+		
+		if taxid in ["Taxid interactor A", "Taxid interactor B"]:	#This means the header wasn't removed.
+			continue
+			
 		unique_taxid_count = 0
-		
-		print(str(taxid))
-		
+		#print(str(taxid))
 		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
 		target_records = Entrez.read(target_handle)
 		taxid_name = target_records[0]["ScientificName"]
 		taxid_parent = target_records[0]["ParentTaxId"]
 		taxid_division = target_records[0]["Division"]
-		
-		print(taxid_division)
-		
+		#print(taxid_division)
 		taxid_filter = ["Bacteria"]
 		if useViruses == True:
-			taxid_filter.append("Phages")	#Need a few more entries here
+			virus_types = ["Phages", "Viruses"]
+			for virus_type in virus_types:
+				taxid_filter.append(virus_type)	
 		if taxid_division in taxid_filter:	#Restrict the set to bacteria, unless useViruses is on
 			taxid_species[taxid] = [taxid_name, taxid_parent, taxid_division]
 			taxid_context_file.write(str(taxid) + "\t" + "\t".join(taxid_species[taxid])+ "\n")
