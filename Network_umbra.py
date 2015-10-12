@@ -109,7 +109,7 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
+useViruses = True	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
 					#Also requires the viral OGs to be downloaded and added.
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
 					
@@ -224,6 +224,8 @@ def get_eggnog_maps():
 	#Clean up by removing compressed files
 	print("\nRemoving compressed files.")
 	all_compressed_files = [convfilename, nogfilename, bactnogfilename]
+	if useViruses == True:
+		all_compressed_files.append(virnogfilename)
 	for filename in all_compressed_files:
 		if os.path.isfile(filename):
 			os.remove(filename)
