@@ -85,11 +85,16 @@ Basic interactome prediction (based on consensus) is complete. Will download pro
 Added unique proteins to predicted interactome output.
 Output statistics about predicted networks after building them.
 The main ID conversion file is now used in lieu of the Uniprot-specific flat file.
+Viral proteins can now be used as long as the useViruses option is on (though host vs. virus interactions are still filtered out)
+	Though phage proteins don't seem to get mapped to NOGs - even in cases like T7 (taxid 10760).
+	Are they in the eggNOG maps?
 
 IN PROGRESS:
 * <- Are priorities
 
-*Allow viral OGs to be used in building the meta-interactome, if requested
+*See line ~444 - need to expand filter to more than just Phages but need to know what the taxonomy designation is
+*Enable host vs. virus protein interactions to be used - should still depend on the useViruses option
+	Can we easily distinguish between host vs. virus (taxidA vs. taxidB) and just two different unrelated taxids?
 
 Evaluate predictions on the basis of OG members (large OGs have less predictive power, at least without sequence alignments)
 Use protein and species count from eggNOG (it's in the annotation file).
@@ -423,15 +428,20 @@ def build_meta(mapping_file_list, ppi_data):
 	
 	for taxid in all_taxids:
 		unique_taxid_count = 0
+		
 		print(str(taxid))
+		
 		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
 		target_records = Entrez.read(target_handle)
 		taxid_name = target_records[0]["ScientificName"]
 		taxid_parent = target_records[0]["ParentTaxId"]
 		taxid_division = target_records[0]["Division"]
+		
+		print(taxid_division)
+		
 		taxid_filter = ["Bacteria"]
 		if useViruses == True:
-			taxid_filter.append("Viruses")
+			taxid_filter.append("Phages")	#Need a few more entries here
 		if taxid_division in taxid_filter:	#Restrict the set to bacteria, unless useViruses is on
 			taxid_species[taxid] = [taxid_name, taxid_parent, taxid_division]
 			taxid_context_file.write(str(taxid) + "\t" + "\t".join(taxid_species[taxid])+ "\n")
@@ -444,7 +454,10 @@ def build_meta(mapping_file_list, ppi_data):
 			#print(taxid_species[taxid])
 	taxid_context_file.close()	
 	
-	print("\nCleaning up data by removing non-protein and non-bacterial interactors.")
+	if useViruses == False:
+		print("\nCleaning up data by removing non-protein and non-bacterial interactors.")
+	else:
+		print("\nCleaning up data by removing non-protein and non-bacterial and non-viral interactors.")
 	interactions_removed = 0
 	for interaction in interaction_array:
 		interaction_ok = 1
