@@ -93,9 +93,9 @@ Viral proteins can now be used as long as the useViruses option is on (though ho
 IN PROGRESS:
 * <- Are priorities
 
-*Enable host vs. virus protein interactions to be used - should still depend on the useViruses option
-	Can we easily distinguish between host vs. virus (taxidA vs. taxidB) and just two different unrelated taxids?
-
+Check on inputs for useViruses option - right now, most viral proteins don't get mapped to NOGs
+	It is likely that viral proteins are not included in the eggNOG protein ID conversion file.
+	
 Evaluate predictions on the basis of OG members (large OGs have less predictive power, at least without sequence alignments)
 Use protein and species count from eggNOG (it's in the annotation file).
 Perform ANOVA between different FuncCats to see consensus interaction patterns.
@@ -114,7 +114,7 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-useViruses = True	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
+useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
 					#Also requires the viral OGs to be downloaded and added.
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
 					
