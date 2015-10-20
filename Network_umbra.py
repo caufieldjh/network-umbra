@@ -133,14 +133,14 @@ def get_eggnog_maps():
 	convfilepath = baseURL + convfilename
 	outfilepath = convfilename[0:-3]
 	if os.path.isfile(convfilename): 
-		print("Found compressed ID conversion file on disk: " + convfilename)
+		print("Found compressed ID conversion file on disk: %s" % convfilename)
 		decompress_convfile = 1
 	if os.path.isfile(outfilepath): 
-		print("Found ID conversion file on disk: " + outfilepath)
+		print("Found ID conversion file on disk: %s" % outfilepath)
 		decompress_convfile = 0
 	else:
 		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
-		print("Downloading from " + convfilepath)
+		print("Downloading from %s" % convfilepath)
 		response = urllib2.urlopen(convfilepath)
 		compressed_file = open(os.path.basename(convfilename), "w+b") #Start local compressed file
 		chunk = 1048576
@@ -148,7 +148,7 @@ def get_eggnog_maps():
 			data = (response.read(chunk)) #Read one Mb at a time
 			compressed_file.write(data)
 			if not data:
-				print("\n" + convfilename + " file download complete.")
+				print("\n%s file download complete." % convfilename)
 				compressed_file.close()
 				break
 			sys.stdout.write(".")
@@ -189,14 +189,14 @@ def get_eggnog_maps():
 		memberfilepath = baseURL + memberfilename
 		outfilepath = memberfilename[0:-3]
 		if os.path.isfile(memberfilename): 
-			print("\nFound compressed NOG membership file on disk: " + memberfilename)
+			print("\nFound compressed NOG membership file on disk: %s" % memberfilename)
 			decompress_memberfile = 1
 		if os.path.isfile(outfilepath): 
-			print("\nFound NOG membership file on disk: " + outfilepath)
+			print("\nFound NOG membership file on disk: %s" % outfilepath)
 			decompress_memberfile = 0
 		else:
 			print("\nDownloading NOG membership file - this may take some time.")
-			print("Downloading from " + memberfilepath)
+			print("Downloading from %s" % memberfilepath)
 			response = urllib2.urlopen(memberfilepath)
 			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
 			chunk = 1048576
@@ -204,14 +204,14 @@ def get_eggnog_maps():
 				data = (response.read(chunk)) #Read one Mb at a time
 				compressed_file.write(data)
 				if not data:
-					print("\n" + memberfilename + " file download complete.")
+					print("\n%s file download complete." % memberfilename)
 					compressed_file.close()
 					break
 				sys.stdout.write(".")
 			decompress_memberfile = 1
 			
 		if decompress_memberfile == 1:
-			print("Decompressing NOG membership file " + memberfilename)
+			print("Decompressing NOG membership file %s" % memberfilename)
 			#Done in chunks since it's a large file
 			with gzip.open(memberfilename) as infile: #Open that compressed file, read and write to uncompressed file
 				outfile = open(outfilepath, "w+b")
@@ -260,7 +260,7 @@ def get_eggnog_maps():
 	nog_count = 0
 	for filename in all_nog_filenames:
 		temp_nog_members = {}	#We will have duplicates within each set but don't want to lose the information.
-		print("Reading from " + filename)
+		print("Reading from %s" % filename)
 		with open(filename) as infile:
 			for line in infile:
 				nog_count = nog_count +1
@@ -279,7 +279,7 @@ def get_eggnog_maps():
 	nogs_length = str(nog_count)
 	proteins_length = str(len(nog_members))
 	
-	print("Mapping " + upids_length + " Uniprot IDs to " + nogs_length + " NOGs through " + proteins_length +  " eggNOG protein IDs:")
+	print("Mapping %s Uniprot IDs to %s NOGs through %s eggNOG protein IDs:" % (upids_length, nogs_length, proteins_length))
 	upid_to_NOG = {}	#Conversion dictionary. Values are OGs, keys are UPIDs.
 	mapped_count = 0	#upids mapped to nogs.
 	for upid in id_dict:
@@ -313,7 +313,7 @@ def get_interactions():
 	intfilename = "protein-interactions.tab"
 	
 	if os.path.isfile(intfilename): 
-		print("Found interaction file on disk: " + intfilename)
+		print("Found interaction file on disk: %s" % intfilename)
 	else:
 		response = urllib2.urlopen(baseURL)
 		print("Downloading from IntAct.")
@@ -486,11 +486,11 @@ def build_meta(mapping_file_list, ppi_data):
 			interactions_removed = interactions_removed +1
 				
 		
-	print("Total taxids: " + str(len(all_filtered_taxids)))
-	print("Total raw interactions: " + str(len(interaction_array)))		
-	print("Interactions removed: " + str(interactions_removed))	
+	print("Total taxids: %s" % (len(all_filtered_taxids)))
+	print("Total raw interactions: %s" % (len(interaction_array)))		
+	print("Interactions removed: %s" % (interactions_removed))	
 	
-	print("Mapping OGs to " + str(len(protein_array)) + " proteins in " + str(len(interaction_filtered_array)) + " interactions.")
+	print("Mapping OGs to %s proteins in %s interactions." % (len(protein_array), len(interaction_filtered_array)))
 	
 	protein_OG_maps = {} #Dictionary to save protein-OG mapping specific for this interaction set
 	mapped_count = 0
@@ -530,7 +530,7 @@ def build_meta(mapping_file_list, ppi_data):
 	for meta_stat in [len(protein_array), interaction_count, proteins_without_OG]:
 		meta_statistics.append(str(meta_stat))
 	meta_stats_file.write("\t".join(meta_statistics))
-	print("\nWrote meta-interactome statistics to " + meta_stats_filename)
+	print("\nWrote meta-interactome statistics to %s" % meta_stats_filename)
 	meta_stats_file.close()
 
 	return [meta_network_filename, taxid_species]
@@ -595,7 +595,7 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	#The second count is the number of different, unique taxids (species or at least distant strains) corresponding to the interaction
 	
 	print("\nCounting interaction contributions. This may take a while.")
-	print("Consensus interactions checked, out of " + str(len(consensus_interactions)) +":")
+	print("Consensus interactions checked, out of %s:" % (len(consensus_interactions)))
 	
 	all_consensus_taxids = []
 	con_interactions_counted = 0
@@ -688,11 +688,11 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		for interactor in interaction[0:2]:
 			interaction.append("\t".join(consensus_annotations[interactor]))
 	
-	print("\nConsensus meta-interactome involves " + str(len(consensus_interactors)) +
-			" interactors and " + str(cons_interaction_count) + " interactions.")
-	print("It involves " + str(len(all_consensus_taxids)) + " unique taxids, " +
-			"though some may be closely related.")
-	print(str(multiple_og_count) + " interactors map to more than one OG.")
+	print("\nConsensus meta-interactome involves %s" +
+			" interactors and %s interactions." % (len(consensus_interactors), cons_interaction_count))
+	print("It involves %s unique taxids, " +
+			"though some may be closely related." % (len(all_consensus_taxids)))
+	print("%s interactors map to more than one OG." % multiple_og_count)
 	
 	print("Writing consensus meta-interactome file.")
 	for interaction in consensus_interactions:
@@ -727,11 +727,11 @@ def merge_data(list_of_filenames):
 			line_contents = ((line.rstrip()).split("\t"))
 			for interactor in line_contents[0:2]:
 				if interactor == "-":
-					print("Empty interactor in " + item + " in line " + str(line_count))
+					print("Empty interactor in %s in line %s" + str() % (item, line_count))
 					write_ok = 0
 					#Unmapped interactors might be denoted with a -. Don't add them.
 			if len(line_contents) != 42:
-				print("Format problem in " + item + " line " + str(line_count))
+				print("Format problem in %s line %s" % (item, line_count))
 				write_ok = 0
 				#Just checking to see if the right number of columns are there
 				#Won't write problem lines to the merged file
@@ -740,7 +740,7 @@ def merge_data(list_of_filenames):
 		this_file.close()
 	return merged_file_name
 	
-def subset_expansion(metafile, consensusfile):
+def subgraph_expansion(metafile, consensusfile):
 	print("\nSubset expansion will filter consensus interactions by functional category" +
 			 " and by conservation across taxonomic groups.\n" +
 			 "It will produce a set of subgraphs, where each graph involves a consensus" +
@@ -1537,7 +1537,7 @@ while requested == 0:
 	if request_next in ["x", "X"]:
 		sys.exit("Exiting...")
 	if request_next in ["a", "A"]:
-		subset_expansion(metafile, consensusfile)
+		subgraph_expansion(metafile, consensusfile)
 	if request_next in ["b", "B"]:
 		predict_interactome(mapping_file_list, metafile, consensusfile)
 	if request_next in ["c", "C"]:
