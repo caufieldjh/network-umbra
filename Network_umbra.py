@@ -118,7 +118,10 @@ useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters pe
 					#Also requires the viral OGs to be downloaded and added.
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
 					
-useNonRefProteomes = False	#Option to search non-reference Uniprot proteomes in the interactome prediction module
+useNonRefProteomes = True	#Option to search non-reference Uniprot proteomes in the interactome prediction module
+#Retrieving non-reference proteomes sometimes throws AttributeError: 'NoneType' object has no attribute 'get_text'
+#Encountered in the get_a_proteome method, parse_proteome_entry when the variable entry_text is assigned
+#Could indicate a malformed entry
 
 #Functions
 
