@@ -119,9 +119,9 @@ useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters pe
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
 					
 useNonRefProteomes = True	#Option to search non-reference Uniprot proteomes in the interactome prediction module
-#Retrieving non-reference proteomes sometimes throws AttributeError: 'NoneType' object has no attribute 'get_text'
-#Encountered in the get_a_proteome method, parse_proteome_entry when the variable entry_text is assigned
-#Could indicate a malformed entry
+#Retrieving non-reference proteomes sometimes returns an empty response.
+#This happens with proteomes only in UniParc (e.g., if they are redundant)
+#In those cases, we reject the search result.
 
 #Functions
 
@@ -1292,8 +1292,11 @@ def get_a_proteome():	#Does what it says.	Much more organized than the rest of t
 		return proteome_url
 		
 	def parse_proteome_entry(up_input):
-		soup = BeautifulSoup(up_input)
-		entry_text = (soup.p.get_text())
+		if not up_input:
+			entry_text = "EMPTY"
+		else:
+			soup = BeautifulSoup(up_input)
+			entry_text = (soup.p.get_text())
 		return entry_text
 		
 	def save_proteome(text,taxid):
@@ -1341,7 +1344,10 @@ def get_a_proteome():	#Does what it says.	Much more organized than the rest of t
 	proteome_url = get_proteome_url(chosen_entry[0], "list") #Options include list, txt, tab
 	proteome_response = requests.get(proteome_url)
 	proteome_text = parse_proteome_entry(proteome_response.text)
-	save_proteome(proteome_text, chosen_entry[2])
+	if proteome_text == "EMPTY":
+		print("Could not retrieve this proteome. See the Uniprot entry for %s." % chosen_entry[0])
+	else:
+		save_proteome(proteome_text, chosen_entry[2])
 
 def describe_consensus(consensusfile):
 	cons_stats_filenames = glob.glob("cons_statistics_*.txt")
