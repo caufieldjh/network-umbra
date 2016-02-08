@@ -20,7 +20,7 @@ Also requires BeautifulSoup 4. Try:
 
 or see http://www.crummy.com/software/BeautifulSoup/bs4/doc/
 
-For storage, network-umbra needs ~600 MB of available disk space to accomodate data files and output. More space may be necessary for proteome files.
+For storage, network-umbra needs ~5 GB of available disk space to accomodate data files and output. More space may be necessary for proteome files.
 
 **INPUT**: 
 
