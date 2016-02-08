@@ -131,7 +131,7 @@ def get_eggnog_maps():
 	#One Uniprot ID may correspond to multiple OGs - e.g. COG1234,COG3810,COG9313. 
 	#these cases are considered OGs in their own right as this may indicate a pattern of conserved sequences on its own 
 	baseURL = "http://eggnogdb.embl.de/download/eggnog_4.1/"
-	convfilename = "eggnog4.protein_id_conversion.tsv.gz "	#File contains ALL database identifiers and corresponding proteins
+	convfilename = "eggnog4.protein_id_conversion.tsv.gz"	#File contains ALL database identifiers and corresponding proteins
 	
 	convfilepath = baseURL + convfilename
 	outfilepath = convfilename[0:-3]
