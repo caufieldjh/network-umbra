@@ -1,14 +1,37 @@
 # network-umbra.py
 
 Predicts interactions in a protein interaction network based off a meta-interactome network.
-Uses eggNOG v.4.1.
+Intended for use with bacterial proteins.
+Uses eggNOG v.4.1 for orthology assignments.
 
-**REQUIRES**: Biopython 1.65 or more recent. Also needs ~600 MB of available disk space to accomodate data files and output. More space may be necessary for proteome files.
+**REQUIRES**: 
 
-**INPUT**: Downloads all available protein-protein interactions for bacteria from IntAct.
-  Alternatively, uses a provided PPI data file in PSI-MI TAB 2.7 format.
+Biopython 1.65 or more recent. Try:
+
+**pip install numpy**
+
+**pip install biopython**
+
+or see http://biopython.org/DIST/docs/install/Installation.html
+
+Also requires BeautifulSoup 4. Try:
+
+**pip install beautifulsoup4**
+
+or see http://www.crummy.com/software/BeautifulSoup/bs4/doc/
+
+For storage, network-umbra needs ~5 GB of available disk space to accomodate data files and output. More space may be necessary for proteome files.
+
+**INPUT**: 
+
+Downloads all available protein-protein interactions for bacteria from IntAct.
+
+Alternatively, uses a provided PPI data file in PSI-MI TAB 2.7 format.
+
   REMOVE THE HEADER ROW if it's present!
+  
   Downloads highest-level (LUCA) and bacteria-specific Uniprot ID to NOG mappings from eggNOG v.4.1.
+  
   Downloads highest-level (LUCA) bacteria-specific NOG annotations from eggNOG v.4.1.
 
 **OUTPUT**: 
