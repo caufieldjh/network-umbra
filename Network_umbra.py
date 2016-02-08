@@ -135,13 +135,17 @@ def get_eggnog_maps():
 	
 	convfilepath = baseURL + convfilename
 	outfilepath = convfilename[0:-3]
-	if os.path.isfile(convfilename): 
+	dl_convfile = 1	#If 1, we need to download
+	if os.path.isfile(convfilename): #Already have the compressed file, don't download
 		print("Found compressed ID conversion file on disk: %s" % convfilename)
 		decompress_convfile = 1
-	if os.path.isfile(outfilepath): 
+		dl_convfile = 0
+	if os.path.isfile(outfilepath): #Already have the decompressed file don't download
 		print("Found ID conversion file on disk: %s" % outfilepath)
 		decompress_convfile = 0
-	else:
+		dl_convfile = 0
+	
+	if dl_convfile == 1:
 		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
 		print("Downloading from %s" % convfilepath)
 		response = urllib2.urlopen(convfilepath)
@@ -154,6 +158,7 @@ def get_eggnog_maps():
 				print("\n%s file download complete." % convfilename)
 				compressed_file.close()
 				break
+			sys.stdout.flush()
 			sys.stdout.write(".")
 		decompress_convfile = 1
 		
@@ -169,6 +174,7 @@ def get_eggnog_maps():
 				if linecount % 100000 == 0:
 						sys.stdout.write(".")
 				if linecount % 1000000 == 0:
+						sys.stdout.flush()
 						sys.stdout.write(str(linecount/1000000))
 			infile.close()
 		newconvfilename = outfilepath
@@ -210,6 +216,7 @@ def get_eggnog_maps():
 					print("\n%s file download complete." % memberfilename)
 					compressed_file.close()
 					break
+				sys.stdout.flush()
 				sys.stdout.write(".")
 			decompress_memberfile = 1
 			
@@ -225,6 +232,7 @@ def get_eggnog_maps():
 					if linecount % 100000 == 0:
 						sys.stdout.write(".")
 					if linecount % 1000000 == 0:
+						sys.stdout.flush()
 						sys.stdout.write(str(linecount/1000000))
 				infile.close()
 			outfile.close()
@@ -253,6 +261,7 @@ def get_eggnog_maps():
 			if linecount % 100000 == 0:
 				sys.stdout.write(".")
 			if linecount % 1000000 == 0:
+				sys.stdout.flush()
 				sys.stdout.write(str(linecount/1000000))
 		infile.close()
 
@@ -292,6 +301,7 @@ def get_eggnog_maps():
 			if mapped_count % 100000 == 0:
 				sys.stdout.write(".")
 			if mapped_count % 1000000 == 0:
+				sys.stdout.flush()
 				sys.stdout.write(str(mapped_count/1000000))
 		
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
