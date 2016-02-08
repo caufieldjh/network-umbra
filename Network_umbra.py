@@ -313,23 +313,24 @@ def get_eggnog_maps():
 		mapfile.write(mapping + "\t" + upid_to_NOG[mapping] + "\n")	#Each line is a uniprot ID and an OG id
 	mapfile.close() 
 	
-	
 def get_interactions():
 	#Download and unzip the most recent IntAct version, filtered for bacteria, using REST
 	#Just uses IntAct for consistency, but could theoretically include other PSIQUIC compatible DB's
 	#May need to add more interactions to the file if not present in IntAct
-	#The PSIQUIC interface may also not retrieve all available interactions or may not filter as desired,
-	#so script prompts for option.
+	#The PSICQUIC interface may also not retrieve all available interactions or may not filter as desired,
+	#so script prompts for option to use other input files.
 	#See format description here: https://code.google.com/p/psimi/wiki/PsimiTab27Format
+	
+	#As of Feb 8 2016, this only downloads a few entries - seem to be an issue with PSICQUIC or IntAct or both.
 	
 	baseURL = "http://www.ebi.ac.uk/Tools/webservices/psicquic/intact/webservices/current/search/query/species:%22taxid:2%22?format=tab27"
 	intfilename = "protein-interactions.tab"
 	
 	if os.path.isfile(intfilename): 
-		print("Found interaction file on disk: %s" % intfilename)
+		print("Found default interaction file on disk: %s" % intfilename)
 	else:
 		response = urllib2.urlopen(baseURL)
-		print("Downloading from IntAct.")
+		print("Downloading from IntAct. NOTE: This option may only provide enough interactions for an example.")
 		intfile = open(os.path.basename(intfilename), "w+b") #Start local file
 		chunk = 1048576
 		while 1:
@@ -339,6 +340,7 @@ def get_interactions():
 				print("\nInteraction file download complete.")
 				intfile.close()
 				break
+			sys.stdout.flush()
 			sys.stdout.write(".")
 
 def get_eggnog_annotations():
@@ -371,6 +373,7 @@ def get_eggnog_annotations():
 					print("\n" + annfilename + " file download complete.")
 					compressed_file.close()
 					break
+				sys.stdout.flush()
 				sys.stdout.write(".")
 		
 		print("Decompressing annotation file.")
@@ -462,9 +465,11 @@ def build_meta(mapping_file_list, ppi_data):
 			taxid_context_file.write(str(taxid) + "\t" + "\t".join(taxid_species[taxid])+ "\n")
 			if taxid not in all_filtered_taxids:
 				all_filtered_taxids.append(taxid)
+				sys.stdout.flush()
 				sys.stdout.write(".")
 				unique_taxid_count = unique_taxid_count +1
 				if unique_taxid_count % 100 == 0:
+					sys.stdout.flush()
 					sys.stdout.write(str(unique_taxid_count))
 			#print(taxid_species[taxid])
 	taxid_context_file.close()	
@@ -596,8 +601,10 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		if new_interaction == 1:
 			cons_interaction_count = cons_interaction_count +1
 			if cons_interaction_count % 100 == 0:
+					sys.stdout.flush()
 					sys.stdout.write(".")
 			if cons_interaction_count % 1000 == 0:
+					sys.stdout.flush()
 					sys.stdout.write(str(cons_interaction_count))
 			consensus_interactions.append(interaction)
 			
@@ -615,8 +622,10 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 	for interaction in consensus_interactions:
 		con_interactions_counted = con_interactions_counted +1
 		if con_interactions_counted % 100 == 0:
+			sys.stdout.flush()
 			sys.stdout.write(".")
 		if con_interactions_counted % 1000 == 0:
+			sys.stdout.flush()
 			sys.stdout.write(str(con_interactions_counted))
 		interaction_sources = []	#The list of taxids found to correspond to this interaction.
 		original_count = 0
@@ -701,10 +710,10 @@ def build_consensus(metafile, annotation_file_list, taxid_species):
 		for interactor in interaction[0:2]:
 			interaction.append("\t".join(consensus_annotations[interactor]))
 	
-	print("\nConsensus meta-interactome involves %s" +
-			" interactors and %s interactions." % (len(consensus_interactors), cons_interaction_count))
-	print("It involves %s unique taxids, " +
-			"though some may be closely related." % (len(all_consensus_taxids)))
+	print("\nConsensus meta-interactome involves " +
+			"%s interactors and %s interactions." % (len(consensus_interactors), cons_interaction_count))
+	print("It involves %s unique taxids, " % (len(all_consensus_taxids)) +
+			"though some may be closely related.")
 	print("%s interactors map to more than one OG." % multiple_og_count)
 	
 	print("Writing consensus meta-interactome file.")
@@ -942,7 +951,9 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 			print("Will now map proteomes to OGs.")
 			break
 	
-	proteome_list = glob.glob('proteomes\proteome_raw_*.txt')	#Raw proteomes, from Uniprot, in list format, labeled with taxid
+	os.chdir(storage_path)
+	proteome_list = glob.glob('proteome_raw_*.txt')	#Raw proteomes, from Uniprot, in list format, labeled with taxid
+	os.chdir("..")
 	
 	map_dict = {}	#Dictionary for Uniprot to OG maps
 	
@@ -960,6 +971,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	
 	for proteome_filename in proteome_list:					#Map all available raw proteomes to OGs.
 		#Proteins without OG mappings retain their Uniprot IDs but we keep track of it in an extra column, too
+		os.chdir(storage_path)
 		print("Mapping proteins in " + proteome_filename)
 		proteome_proteins = []
 		proteome_map_filename = proteome_filename.replace("raw", "map")
@@ -990,6 +1002,7 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 				+ str(total_proteins_mapped) + " map to OGs.")
 		if total_proteins_mapped == 0:
 			print("WARNING: No proteins in this proteome map to OGs.")
+		os.chdir("..")
 	
 	os.chdir(storage_path)
 	proteome_map_list = glob.glob('proteome_map_*.txt')	#Proteomes mapped to eggNOG OGs, labeled with taxid
@@ -1484,7 +1497,7 @@ if len(meta_file_list) == 0:
 				sys.exit("Input list is empty. Exiting...")
 			for item in interaction_file_list:
 				print(item)
-			print("Merging into a single file.")
+			print("Merging into a single file and checking for malformed interaction entries.")
 			ppi_data_filename = merge_data(interaction_file_list)
 		if ppi_data_option in ["X", "x"]:
 			sys.exit("Exiting...")
