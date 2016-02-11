@@ -7,7 +7,7 @@ Can also retrieve proteomes from Uniprot, assign their proteins to orthologs, an
 
 **REQUIRES**: 
 
-**Biopython 1.65** or more recent. Try installing wih **pip**:
+**Biopython 1.65** or more recent. Try installing with **pip**:
 
     pip install numpy
 
