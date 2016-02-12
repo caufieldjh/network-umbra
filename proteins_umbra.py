@@ -13,8 +13,12 @@ INPUT: Downloads a reference proteome from Uniprot.
 OUTPUT: 
 'proteome_map_[taxid].txt' - on each line:
   a single OG membership
-  the Uniprot ID of the protein
+  the UniProtAC of the protein
   a binary value indicating whether the protein maps to an OG (0 if no, 1 if yes)
+  
+WORK IN PROGRESS:
+  Adding ability to map viral proteins to eggNOG's new viral OGs.
+  Providing function annotations on mapped proteins.
 
 '''
 
@@ -27,16 +31,21 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
+useViruses = True	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
 					#Also requires the viral OGs to be downloaded and added.
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
+#NOTE: Viruses are not currently in the eggNOG ID conversion file
+#The eggNOG protein IDs vary from protein to protein but are often Uniprot IDs (mnemonic identifiers, i.e. A9J730_BPLUZ)
+#We still check the ID conversion file for them in case it gets updated soon
 					
-useNonRefProteomes = True	#Option to search non-reference Uniprot proteomes in the interactome prediction module
-#Retrieving non-reference proteomes sometimes returns an empty response.
-#This happens with proteomes only in UniParc (e.g., if they are redundant)
-#In those cases, we reject the search result.
+useNonRefProteomes = True	#Option to search non-reference Uniprot proteomes
+#Many of these proteomes have been made redundant in Uniprot
+#and this script ignores redundant results, so they will not be seen
 
 #Functions
+
+def chunkit(input_seq, chunk_size):
+    return (input_seq[position:position + chunk_size] for position in xrange(0, len(input_seq), chunk_size))
 
 def get_eggnog_maps(version): 
 	#Download and unzip the eggNOG ID conversion file 
@@ -162,13 +171,13 @@ def get_eggnog_maps(version):
 	#Load and filter the ID conversion file as dictionary
 	print("Parsing ID conversion file. Lines read, in millions:")
 	with open(convfilename[0:-3]) as infile:
-		id_dict = {}	#Dictionary of eggNOG protein IDs with database IDs as keys
+		id_dict = {}	#Dictionary of eggNOG protein IDs as values and database IDs (UniprotAC) as keys
 		#Gets filtered down to relevant database IDs (i.e., Uniprot IDs)
 		linecount = 0
 		for line in infile:
 			linecount = linecount +1
-			line_raw = ((line.rstrip()).split("\t"))	#Protein IDs are split for some reason; merge them
-			one_id_set = [line_raw[0] + "." + line_raw[1], line_raw[2], line_raw[3]]
+			line_raw = ((line.rstrip()).split("\t"))	
+			one_id_set = [line_raw[0] + "." + line_raw[1], line_raw[2], line_raw[3]] #Protein IDs are split for some reason; merge them
 			if "UniProt_AC" in one_id_set[2]:
 				id_dict[one_id_set[1]] = one_id_set[0]
 			if linecount % 100000 == 0:
@@ -181,25 +190,53 @@ def get_eggnog_maps(version):
 	#Use filtered ID conversion input to map to NOG members
 	print("\nReading NOG membership files.")
 	all_nog_filenames = [nogfilename[0:-3], bactnogfilename[0:-3]]
+	if useViruses == True:
+		all_nog_filenames.append(virnogfilename[0:-3])
 	nog_members = {}	#Dictionary of NOG ids with protein IDs as keys (need to split entries for each)
 	nog_count = 0
 	for filename in all_nog_filenames:
 		temp_nog_members = {}	#We will have duplicates within each set but don't want to lose the information.
 		print("Reading from %s" % filename)
 		with open(filename) as infile:
+			membercol = 5	#The column where the NOG members are
+			if filename == virnogfilename[0:-3]:	#The virus members file has a different format as there is no FuncCat column
+				infile.readline()	#Skip the first line
+				membercol = 4
+				viral_ids = [] #A list of viral eggNOG protein IDs, some of which are Uniprot IDs to be converted to ACs
 			for line in infile:
 				nog_count = nog_count +1
 				line_raw = ((line.rstrip()).split("\t"))
 				nog_id = line_raw[1]
-				line_members = line_raw[5].split(",")
-				for protein_id in line_members:			#The same protein could be in more than one OG at the same level
-					if protein_id in temp_nog_members:
+				line_members = line_raw[membercol].split(",")
+				for protein_id in line_members:			
+					if filename == virnogfilename[0:-3]: #If Viruses, this is where we need to collect all the Uniprot IDs 
+						if protein_id not in viral_ids:
+							viral_ids.append(protein_id)
+					if protein_id in temp_nog_members: #The same protein could be in more than one OG at the same level
 						temp_nog_members[protein_id] = temp_nog_members[protein_id] + "," + nog_id
 					else:
 						temp_nog_members[protein_id] = nog_id
 			infile.close()
 		nog_members.update(temp_nog_members)
+		
+	#If Viruses, do the Uniprot ID -> AC conversion now as a batch and store all in id_dict{}
+	if useViruses == True:
+		print("Finding identifiers for %s viral proteins." % len(viral_ids))
+		for id_group in chunkit(viral_ids,100):
+			print("Looking for a group...")
+			print(id_group)
+			these_viral_ids = []
+			for protein in id_group:
+				these_viral_ids.append(protein.split(".")[1]) #Don't need the taxid for query
+			query = " ".join(these_viral_ids)
+			map_search_url = 'http://www.uniprot.org/mapping/?query=' + query + \
+							"&from=ID&to=ACC&format=tab"
+			search_response = requests.get(map_search_url)
+			print(search_response.text)
+			
+			#id_dict[upid_ac] = eggnog_protein_id
 	
+	#Get counts of how many identifiers we have now
 	upids_length = str(len(id_dict))
 	nogs_length = str(nog_count)
 	proteins_length = str(len(nog_members))
@@ -218,7 +255,7 @@ def get_eggnog_maps(version):
 				sys.stdout.write(str(mapped_count/1000000))
 		
 	#Use this mapping to build map file, named "uniprot_og_maps_*.txt"
-	print("Writing map file.")
+	print("\nWriting map file.")
 	nowstring = (date.today()).isoformat()
 	mapfilename = "uniprot_og_maps_" + nowstring + ".txt"
 	mapfile = open(mapfilename, "w+b")
@@ -234,8 +271,9 @@ def get_eggnog_annotations():
 	annfilenames = [bactannfilename, lucaannfilename]
 	
 	if useViruses == True:
+		virannfilename = "Viruses.annotations.tsv.gz"
 		baseURLs.append("http://eggnogdb.embl.de/download/latest/data/viruses/Viruses/")
-		annfilenames.append("Viruses.annotations.tsv.gz")
+		annfilenames.append(virannfilename)
 	
 	this_url = 0
 	for annfilename in annfilenames:
@@ -269,6 +307,8 @@ def get_eggnog_annotations():
 		
 	print("\nRemoving compressed files.")
 	all_compressed_files = [bactannfilename, lucaannfilename]
+	if useViruses == True:
+		all_compressed_files.append(virannfilename)
 	for filename in all_compressed_files:
 		os.remove(filename)
 		
