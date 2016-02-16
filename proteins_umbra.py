@@ -6,6 +6,10 @@ Uses eggNOG v.4.1 - or whatever the most recent version is.
 
 REQUIRES: Biopython 1.65 or more recent
 			Needs ~5 GB of disk space for ID conversion files.
+			Needs an additional ~29 GB for mapping virus protein IDs.
+			 (This is because it uses the full Uniprot ID mapping database,
+			 which is excessive but more reliable than their mapping server
+			 for large mapping requests)
 
 INPUT: Downloads a reference proteome from Uniprot.
 		Produces OG maps if needed or uses those produced by Network_umbra.py.
@@ -19,6 +23,10 @@ OUTPUT:
 WORK IN PROGRESS:
   Adding ability to map viral proteins to eggNOG's new viral OGs.
   Providing function annotations on mapped proteins.
+  Making loading bars nicer and more informative.
+  
+PLANNED ADDITIONS:
+  Make this a module for Network_umbra.py and remove this functionality from that base.
 
 '''
 
@@ -62,57 +70,104 @@ def get_eggnog_maps(version):
 		print("Found compressed ID conversion file on disk: %s" % convfilename)
 		decompress_convfile = 1
 		dl_convfile = 0
-	if os.path.isfile(outfilepath): #Already have the decompressed file don't download
+	if os.path.isfile(outfilepath): #Already have the decompressed file, don't download
 		print("Found ID conversion file on disk: %s" % outfilepath)
 		decompress_convfile = 0
 		dl_convfile = 0
 	
 	if dl_convfile == 1:
-		print("Downloading ID mapping file - this file is ~400 Mb compressed so this may take some time.")
+		print("Downloading ID mapping file - this file is large so this may take some time.")
 		print("Downloading from %s" % convfilepath)
 		response = urllib2.urlopen(convfilepath)
+		filesize = response.info()['Content-Length']
 		compressed_file = open(os.path.basename(convfilename), "w+b") #Start local compressed file
-		chunk = 1048576
+		chunk = 2097152
+		totaldata = 0
 		while 1:
-			data = (response.read(chunk)) #Read one Mb at a time
+			data = (response.read(chunk)) #Read two Mb at a time
 			compressed_file.write(data)
+			totaldata = totaldata + chunk
 			if not data:
 				print("\n%s file download complete." % convfilename)
 				compressed_file.close()
 				break
 			sys.stdout.flush()
-			sys.stdout.write(".")
+			sys.stdout.write("\r%s out of %s bytes" % (totaldata, filesize))
 		decompress_convfile = 1
 		
 	if decompress_convfile == 1:
 		print("Decompressing map file. Lines written, in millions:")
-		#Done in chunks since it's a large file
 		with gzip.open(convfilename) as infile: #Open that compressed file, read and write to uncompressed file
 			outfile = open(outfilepath, "w+b")
 			linecount = 0
 			for line in infile:
 				outfile.write(line)
 				linecount = linecount +1
-				if linecount % 100000 == 0:
-						sys.stdout.write(".")
 				if linecount % 1000000 == 0:
 						sys.stdout.flush()
-						sys.stdout.write(str(linecount/1000000))
+						sys.stdout.write("\r%s" % (linecount/1000000))
 			infile.close()
 		newconvfilename = outfilepath
 		outfile.close()
 	
-	#Download and decompress member NOG files (2 of them)
+	#Download and decompress member NOG files (at least 2 of them)
 	nogURL = baseURL + "data/NOG/"
 	nogfilename = "NOG.members.tsv.gz"
 	bactnogURL = baseURL + "data/bactNOG/"
 	bactnogfilename = "bactNOG.members.tsv.gz" 
 	all_nog_locations = [[nogURL, nogfilename], [bactnogURL, bactnogfilename]]
 	
-	if useViruses == True:
+	if useViruses == True:	#Need some additional files to handle viral proteins
 		virnogURL = baseURL + "data/viruses/Viruses/"
 		virnogfilename = "Viruses.members.tsv.gz"
 		all_nog_locations.append([virnogURL, virnogfilename])
+		up_baseURL = "ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/"
+		up_mapping_filename = "idmapping.dat.gz"
+		up_mapping_filepath = up_baseURL + up_mapping_filename
+		up_outfilepath = up_mapping_filename[0:-3]
+		
+		dl_up_mapping_file = 1	#If 1, we need to download
+		if os.path.isfile(up_mapping_filename): #Already have the compressed file, don't download
+			print("Found compressed Uniprot ID conversion file on disk: %s" % up_mapping_filename)
+			decompress_up_mapping_file = 1
+			dl_up_mapping_file = 0
+		if os.path.isfile(up_outfilepath): #Already have the decompressed file, don't download
+			print("Found ID conversion file on disk: %s" % up_outfilepath)
+			decompress_up_mapping_file = 0
+			dl_up_mapping_file = 0
+		
+		if dl_up_mapping_file == 1:
+			print("\nDownloading Uniprot ID mapping file for viral protein mapping. Please wait as this file is large.")
+			print("Downloading from %s" % up_mapping_filepath)
+			response = urllib2.urlopen(up_mapping_filepath)
+			filesize = response.info()['Content-Length']
+			compressed_file = open(os.path.basename(up_mapping_filename), "w+b") #Start local compressed file
+			chunk = 2097152
+			totaldata = 0
+			while 1:
+				data = (response.read(chunk)) #Read two Mb at a time
+				compressed_file.write(data)
+				if not data:
+					print("\n%s file download complete." % up_mapping_filename)
+					compressed_file.close()
+					break
+				sys.stdout.flush()
+				sys.stdout.write("\r%s out of %s bytes" % (totaldata, filesize))
+			decompress_up_mapping_file = 1
+			
+		if decompress_up_mapping_file == 1:
+			print("Decompressing Uniprot ID mapping file. Lines written, in millions:")
+			with gzip.open(up_mapping_filename) as infile: #Open that compressed file, read and write to uncompressed file
+				outfile = open(up_outfilepath, "w+b")
+				linecount = 0
+				for line in infile:
+					outfile.write(line)
+					linecount = linecount +1
+					if linecount % 1000000 == 0:
+							sys.stdout.flush()
+							sys.stdout.write("\r%s" % (linecount/1000000))
+				infile.close()
+				outfile.close()
 	
 	for location in all_nog_locations:
 		baseURL = location[0]
@@ -129,17 +184,19 @@ def get_eggnog_maps(version):
 			print("\nDownloading NOG membership file - this may take some time.")
 			print("Downloading from %s" % memberfilepath)
 			response = urllib2.urlopen(memberfilepath)
+			filesize = response.info()['Content-Length']
 			compressed_file = open(os.path.basename(memberfilename), "w+b") #Start local compressed file
-			chunk = 1048576
+			chunk = 2097152
+			totaldata = 0
 			while 1:
-				data = (response.read(chunk)) #Read one Mb at a time
+				data = (response.read(chunk)) #Read two Mb at a time
 				compressed_file.write(data)
 				if not data:
 					print("\n%s file download complete." % memberfilename)
 					compressed_file.close()
 					break
 				sys.stdout.flush()
-				sys.stdout.write(".")
+				sys.stdout.write("\r%s out of %s bytes" % (totaldata, filesize))
 			decompress_memberfile = 1
 			
 		if decompress_memberfile == 1:
@@ -151,11 +208,9 @@ def get_eggnog_maps(version):
 				for line in infile:
 					outfile.write(line)
 					linecount = linecount +1
-					if linecount % 100000 == 0:
-						sys.stdout.write(".")
 					if linecount % 1000000 == 0:
 						sys.stdout.flush()
-						sys.stdout.write(str(linecount/1000000))
+						sys.stdout.write("\r%s" % (linecount/1000000))
 				infile.close()
 			outfile.close()
 			
@@ -163,7 +218,8 @@ def get_eggnog_maps(version):
 	print("\nRemoving compressed files.")
 	all_compressed_files = [convfilename, nogfilename, bactnogfilename]
 	if useViruses == True:
-		all_compressed_files.append(virnogfilename)
+		for this_filename in [virnogfilename, up_mapping_filename]:
+			all_compressed_files.append(this_filename)
 	for filename in all_compressed_files:
 		if os.path.isfile(filename):
 			os.remove(filename)
@@ -180,11 +236,9 @@ def get_eggnog_maps(version):
 			one_id_set = [line_raw[0] + "." + line_raw[1], line_raw[2], line_raw[3]] #Protein IDs are split for some reason; merge them
 			if "UniProt_AC" in one_id_set[2]:
 				id_dict[one_id_set[1]] = one_id_set[0]
-			if linecount % 100000 == 0:
-				sys.stdout.write(".")
 			if linecount % 1000000 == 0:
 				sys.stdout.flush()
-				sys.stdout.write(str(linecount/1000000))
+				sys.stdout.write("\r%s" % (linecount/1000000))
 		infile.close()
 
 	#Use filtered ID conversion input to map to NOG members
@@ -209,7 +263,7 @@ def get_eggnog_maps(version):
 				nog_id = line_raw[1]
 				line_members = line_raw[membercol].split(",")
 				for protein_id in line_members:			
-					if filename == virnogfilename[0:-3]: #If Viruses, this is where we need to collect all the Uniprot IDs 
+					if filename == virnogfilename[0:-3]: #If Viruses, we need to convert IDs as they aren't in the eggNOG ID conversion file.
 						if protein_id not in viral_ids:
 							viral_ids.append(protein_id)
 					if protein_id in temp_nog_members: #The same protein could be in more than one OG at the same level
@@ -219,22 +273,35 @@ def get_eggnog_maps(version):
 			infile.close()
 		nog_members.update(temp_nog_members)
 		
-	#If Viruses, do the Uniprot ID -> AC conversion now as a batch and store all in id_dict{}
+	
 	if useViruses == True:
+		
+		#We use three different dictionaries here.
+		#The first is Uniprot IDs to UniprotACs.
+		#The second is eggNOG IDs to Uniprot IDs.
+		#The third is UniprotACs to eggNOG IDs - this is id_dict{} already.
+		uniprotID_to_uniprotAC = {}
+		eggnog_to_uniprotID = {}
+		
+		print("Parsing Uniprot ID mapping file. Lines read, in millions:")
+		with open(up_outfilepath) as infile:
+			linecount = 0
+			for line in infile:
+				linecount = linecount +1
+				line_raw = ((line.rstrip()).split("\t"))	
+				if line_raw[1] == "UniProtKB-ID" :
+					uniprotID_to_uniprotAC[line_raw[1]] = line_raw[0]
+				if linecount % 1000000 == 0:
+					sys.stdout.flush()
+					sys.stdout.write("\r%s" % (linecount/1000000))
+			infile.close()
+		
 		print("Finding identifiers for %s viral proteins." % len(viral_ids))
-		for id_group in chunkit(viral_ids,100):
-			print("Looking for a group...")
-			print(id_group)
-			these_viral_ids = []
-			for protein in id_group:
-				these_viral_ids.append(protein.split(".")[1]) #Don't need the taxid for query
-			query = " ".join(these_viral_ids)
-			map_search_url = 'http://www.uniprot.org/mapping/?query=' + query + \
-							"&from=ID&to=ACC&format=tab"
-			search_response = requests.get(map_search_url)
-			print(search_response.text)
+		for viral_id in viral_ids:
+			eggnog_to_uniprotID[viral_id] = (viral_id.split("."))[1]	#Remove the taxid
 			
-			#id_dict[upid_ac] = eggnog_protein_id
+		
+		#id_dict[upid_ac] = eggnog_protein_id
 	
 	#Get counts of how many identifiers we have now
 	upids_length = str(len(id_dict))
@@ -249,6 +316,7 @@ def get_eggnog_maps(version):
 			upid_to_NOG[upid] = nog_members[id_dict[upid]]
 			mapped_count = mapped_count +1
 			if mapped_count % 100000 == 0:
+				sys.stdout.flush()
 				sys.stdout.write(".")
 			if mapped_count % 1000000 == 0:
 				sys.stdout.flush()
@@ -284,18 +352,20 @@ def get_eggnog_annotations():
 			print("Found compressed annotation file on disk: " + annfilename)
 		else:
 			response = urllib2.urlopen(annfilepath)
+			filesize = response.info()['Content-Length']
 			print("Downloading from " + annfilepath)
 			compressed_file = open(os.path.basename(annfilename), "w+b") #Start local compressed file
-			chunk = 1048576
+			chunk = 2097152
+			totaldata = 0
 			while 1:
-				data = (response.read(chunk)) #Read one Mb at a time
+				data = (response.read(chunk)) #Read two Mb at a time
 				compressed_file.write(data)
 				if not data:
 					print("\n" + annfilename + " file download complete.")
 					compressed_file.close()
 					break
 				sys.stdout.flush()
-				sys.stdout.write(".")
+				sys.stdout.write("\r%s out of %s bytes" % (totaldata, filesize))
 		
 		print("Decompressing annotation file.")
 		with gzip.open(annfilename) as infile: #Open that compressed file, read and write to uncompressed file
