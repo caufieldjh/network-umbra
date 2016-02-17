@@ -277,31 +277,48 @@ def get_eggnog_maps(version):
 	if useViruses == True:
 		
 		#We use three different dictionaries here.
-		#The first is Uniprot IDs to UniprotACs.
+		#The first is Uniprot IDs to UniprotACs (just for viral proteins)
 		#The second is eggNOG IDs to Uniprot IDs.
 		#The third is UniprotACs to eggNOG IDs - this is id_dict{} already.
 		uniprotID_to_uniprotAC = {}
 		eggnog_to_uniprotID = {}
+		unmapped_ids = [] #eggNOG protein IDs which may not contain Uniprot IDs
 		
+		#We go through the viral protein IDs twice, first to get Uniprot IDs
+		#and then to add them to id_dict.
+		
+		for viral_id in viral_ids:
+			eggnog_to_uniprotID[viral_id] = (viral_id.split("."))[1]	#Remove the taxid
+			#Some of the eggNOG IDs may not include UniprodIDs, but many do
+		
+		#This data file is too large to efficiently much of it in a dict.
+		#Luckily we just got the IDs we need here to filter it
 		print("Parsing Uniprot ID mapping file. Lines read, in millions:")
 		with open(up_outfilepath) as infile:
 			linecount = 0
 			for line in infile:
 				linecount = linecount +1
 				line_raw = ((line.rstrip()).split("\t"))	
-				if line_raw[1] == "UniProtKB-ID" :
-					uniprotID_to_uniprotAC[line_raw[1]] = line_raw[0]
+				if line_raw[1] == "UniProtKB-ID" and line_raw[2] in eggnog_to_uniprotID.values():
+					uniprotID_to_uniprotAC[line_raw[2]] = line_raw[0]
 				if linecount % 1000000 == 0:
 					sys.stdout.flush()
 					sys.stdout.write("\r%s" % (linecount/1000000))
 			infile.close()
 		
 		print("Finding identifiers for %s viral proteins." % len(viral_ids))
-		for viral_id in viral_ids:
-			eggnog_to_uniprotID[viral_id] = (viral_id.split("."))[1]	#Remove the taxid
-			
 		
-		#id_dict[upid_ac] = eggnog_protein_id
+		for viral_id in viral_ids:
+			upid = eggnog_to_uniprotID[viral_id]
+			if upid in uniprotID_to_uniprotAC:
+				upid_ac = uniprotID_to_uniprotAC[upid]
+				id_dict[upid_ac] = viral_id
+			else:
+				unmapped_ids.append(viral_id)
+				
+		print("Done mapping viral proteins.")
+		print("The following entries were not recognized as Uniprot IDs:")
+		print(unmapped_ids)
 	
 	#Get counts of how many identifiers we have now
 	upids_length = str(len(id_dict))
