@@ -587,47 +587,48 @@ def get_a_proteome():	#Does what it says.	Much more organized than the rest of t
 	else:
 		save_proteome(proteome_text, chosen_entry[2])
 		
-#Main
-
-#Check for eggNOG mapping file and get if needed
-#Requires downloading several files and building new mapping file from them
-mapping_file_list = glob.glob('uniprot_og_maps*.txt')
-if len(mapping_file_list) >2:
-	sys.exit("Found more than one mapping file. Check for duplicates.")
-if len(mapping_file_list) == 0:
-	print("No eggNOG mapping files found or they're incomplete. Rebuilding them.")
-	version = "latest"
-	version = raw_input("Which eggNOG version would you prefer? Default is latest version.\n")
-	if version not in ["4.5","4.1","4.0"]:
-		version = "latest"
-	else:
-		version = "eggnog_" + version
-	get_eggnog_maps(version)
+def main():
+	#Check for eggNOG mapping file and get if needed
+	#Requires downloading several files and building new mapping file from them
 	mapping_file_list = glob.glob('uniprot_og_maps*.txt')
-	
-#Check for eggNOG annotation file and get if needed
-annotation_file_list = glob.glob('*annotations.tsv')
-expected_filecount = 2
-if useViruses == True:
-	expected_filecount = 3
-if len(annotation_file_list) > expected_filecount:
-	sys.exit("Found more eggNOG annotation files than expected. Check for duplicates.")
-if len(annotation_file_list) < expected_filecount:
-	print("No eggNOG annotation files found or they're incomplete. Retrieving them.")
-	get_eggnog_annotations()
+	if len(mapping_file_list) >2:
+		sys.exit("Found more than one mapping file. Check for duplicates.")
+	if len(mapping_file_list) == 0:
+		print("No eggNOG mapping files found or they're incomplete. Rebuilding them.")
+		version = "latest"
+		version = raw_input("Which eggNOG version would you prefer? Default is latest version.\n")
+		if version not in ["4.5","4.1","4.0"]:
+			version = "latest"
+		else:
+			version = "eggnog_" + version
+		get_eggnog_maps(version)
+		mapping_file_list = glob.glob('uniprot_og_maps*.txt')
+		
+	#Check for eggNOG annotation file and get if needed
 	annotation_file_list = glob.glob('*annotations.tsv')
+	expected_filecount = 2
+	if useViruses == True:
+		expected_filecount = 3
+	if len(annotation_file_list) > expected_filecount:
+		sys.exit("Found more eggNOG annotation files than expected. Check for duplicates.")
+	if len(annotation_file_list) < expected_filecount:
+		print("No eggNOG annotation files found or they're incomplete. Retrieving them.")
+		get_eggnog_annotations()
+		annotation_file_list = glob.glob('*annotations.tsv')
+		
+	#Quit now or ask for next step.
+	requested = 0
+	while requested == 0:
+		request_next = raw_input("\nChoose from the following options.\n" 
+			"A: Download a reference proteome and map to OGs.\n"
+			"X: Exit.\n") 
+		if request_next in ["x", "X"]:
+			sys.exit("Exiting...")
+		if request_next in ["a", "A"]:
+			get_mapped_proteome(mapping_file_list)
 	
-#Quit now or ask for next step.
-requested = 0
-while requested == 0:
-	request_next = raw_input("\nChoose from the following options.\n" 
-		"A: Download a reference proteome and map to OGs.\n"
-		"X: Exit.\n") 
-	if request_next in ["x", "X"]:
-		sys.exit("Exiting...")
-	if request_next in ["a", "A"]:
-		get_mapped_proteome(mapping_file_list)
+		print("\nChoose from the list, please.")
 
-	print("\nChoose from the list, please.")
-			
-sys.exit(0)
+
+if __name__ == "__main__":
+	sys.exit(main())

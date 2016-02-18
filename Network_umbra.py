@@ -105,6 +105,8 @@ Perform ANOVA between different FuncCats to see consensus interaction patterns.
 
 '''
 
+import proteins_umbra
+
 import glob, gzip, operator, os, re, requests, sys, urllib2, zipfile
 from Bio import Entrez
 from bs4 import BeautifulSoup
@@ -114,7 +116,7 @@ from datetime import date
 Entrez.email = 'caufieldjh@vcu.edu'
 
 #Options
-useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
+useViruses = True	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
 					#Also requires the viral OGs to be downloaded and added.
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
 					
@@ -1291,86 +1293,8 @@ def predict_interactome(mapping_file_list, metafile, consensusfile):
 	print("\nWrote summary statistics for these interactomes to " + multi_inter_stats_file_name)
 	print("\nComplete.\n")
 	
-def get_a_proteome():	#Does what it says.	Much more organized than the rest of this since I wrote it a while ago.
-	
-	def get_search_url(query, fil):
-		search_url = "http://www.uniprot.org/proteomes/?query=" + query + \
-					"&fil=" + fil + "&sort=score"
-		return search_url
-	
-	def parse_search(up_input):
-		search_results = []
-		soup = BeautifulSoup(up_input)
-		for child in (soup.find_all('tr')):
-			single_result = child.get_text("\t")
-			search_results.append(single_result)
-		del search_results[0:2]
-		if len(search_results) == 0:
-			print("No results found.")
-			return None
-		return search_results
-	
-	def get_proteome_url(entry, format_choice):
-		proteome_url = "http://www.uniprot.org/uniprot/?sort=&desc=&query=proteome:" + entry + "&force=no&format=" + format_choice
-		return proteome_url
-		
-	def parse_proteome_entry(up_input):
-		if not up_input:
-			entry_text = "EMPTY"
-		else:
-			soup = BeautifulSoup(up_input)
-			entry_text = (soup.p.get_text())
-		return entry_text
-		
-	def save_proteome(text,taxid):
-		os.chdir("proteomes")
-		filename = "proteome_raw_" + str(taxid) + ".txt"
-		try:
-			outfile = open(filename, 'wb')
-		except IOError as e:
-			print("I/O error({0}): {1}".format(e.errno, e.strerror))
-			sys.exit()
-		for line in text:
-			outfile.write(line)
-		print("File written to " + filename)
-		outfile.close()
-		os.chdir("..")
-
-	#Retrieve proteomes on a query
-	query = (raw_input("Please specify a full or partial species name.\n")).rstrip()
-	ref_filter = "reference%3Ayes"
-	if useNonRefProteomes == True:
-		ref_filter = ""
-	search_results_url = get_search_url(query, ref_filter) #Leave filter as "" to get non-reference proteomes too
-								#Other option: taxonomy%3A"Bacteria+%5B2%5D" for just bacteria
-	
-	search_response = requests.get(search_results_url)
-	
-	#Output the query results
-	print(search_response)
-	proteome_entries = parse_search(search_response.text)
-	if proteome_entries == None:
-		return None
-	i = 0
-	print("Result\tAccession\tName")
-	for entry in proteome_entries:
-		print(str(i) + "\t" + entry)
-		i = i +1
-	
-	#Choose a single proteome and output to file
-	choice = raw_input('Please choose a search result.\n')
-	if not re.match("^[0-9]*$", choice):
-		print("Numbers only, please.")
-		sys.exit()
-	chosen_entry = (proteome_entries[int(choice)]).split("\t")
-	print("Retrieving proteome for " + chosen_entry[1])
-	proteome_url = get_proteome_url(chosen_entry[0], "list") #Options include list, txt, tab
-	proteome_response = requests.get(proteome_url)
-	proteome_text = parse_proteome_entry(proteome_response.text)
-	if proteome_text == "EMPTY":
-		print("Could not retrieve this proteome. See the Uniprot entry for %s." % chosen_entry[0])
-	else:
-		save_proteome(proteome_text, chosen_entry[2])
+def get_a_proteome():
+	proteins_umbra.get_a_proteome()
 
 def describe_consensus(consensusfile):
 	cons_stats_filenames = glob.glob("cons_statistics_*.txt")
@@ -1421,159 +1345,163 @@ def describe_consensus(consensusfile):
 		taxid_name = taxids_and_context[taxid_only][0]
 		print(taxid_name + "\t" + taxid_only + "\t" + str(taxid[1]))
 			
-#Main
-
-#Check for eggNOG mapping file and get if needed
-#Requires downloading several files and building new mapping file from them
-mapping_file_list = glob.glob('uniprot_og_maps*.txt')
-if len(mapping_file_list) >2:
-	sys.exit("Found more than one mapping file. Check for duplicates.")
-if len(mapping_file_list) == 0:
-	print("No eggNOG mapping files found or they're incomplete. Rebuilding them.")
-	get_eggnog_maps()
+def main():
+	#Check for eggNOG mapping file and get if needed
+	#Requires downloading several files and building new mapping file from them
 	mapping_file_list = glob.glob('uniprot_og_maps*.txt')
-	
-#Check for eggNOG annotation file and get if needed
-annotation_file_list = glob.glob('*annotations.tsv')
-expected_filecount = 2
-if useViruses == True:
-	expected_filecount = 3
-if len(annotation_file_list) > expected_filecount:
-	sys.exit("Found more eggNOG annotation files than expected. Check for duplicates.")
-if len(annotation_file_list) < expected_filecount:
-	print("No eggNOG annotation files found or they're incomplete. Retrieving them.")
-	get_eggnog_annotations()
+	if len(mapping_file_list) >2:
+		sys.exit("Found more than one mapping file. Check for duplicates.")
+	if len(mapping_file_list) == 0:
+		print("No eggNOG mapping files found or they're incomplete. Rebuilding them.")
+		get_eggnog_maps()
+		mapping_file_list = glob.glob('uniprot_og_maps*.txt')
+		
+	#Check for eggNOG annotation file and get if needed
 	annotation_file_list = glob.glob('*annotations.tsv')
-	
-#Prompt for choice of protein interactions.
-#May provide manually or may download, but downloaded set may not be filtered properly.
-#Don't need to get interactions if we already have a meta-interactome.
-meta_file_list = glob.glob('*metainteractome*.txt')
-ppi_data_filename = ""
-if len(meta_file_list) >1:
-	sys.exit("More than one meta-interactome found. Please use just one at a time.")
-if len(meta_file_list) == 0:
-	print("\nNo meta-interactome found.")
-	while ppi_data_filename == "":
-		ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
-		"Enter:\n R for retrieval\n L for local file, \n M for multiple inputs, \n or X to quit.\n")
-		if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
-			#May not include all PPI available through HTTP IntAct interface.
-			ppi_data_filename = "protein-interactions.tab"
-			interaction_file_list = glob.glob(ppi_data_filename)
-			if len(interaction_file_list) >1:
-				sys.exit("One protein interaction file at a time, please! Check for duplicates.")
-			if len(interaction_file_list) == 0:
-				print("No protein interaction file found. Retrieving it.")
-				get_interactions()
+	expected_filecount = 2
+	if useViruses == True:
+		expected_filecount = 3
+	if len(annotation_file_list) > expected_filecount:
+		sys.exit("Found more eggNOG annotation files than expected. Check for duplicates.")
+	if len(annotation_file_list) < expected_filecount:
+		print("No eggNOG annotation files found or they're incomplete. Retrieving them.")
+		get_eggnog_annotations()
+		annotation_file_list = glob.glob('*annotations.tsv')
+		
+	#Prompt for choice of protein interactions.
+	#May provide manually or may download, but downloaded set may not be filtered properly.
+	#Don't need to get interactions if we already have a meta-interactome.
+	meta_file_list = glob.glob('*metainteractome*.txt')
+	ppi_data_filename = ""
+	if len(meta_file_list) >1:
+		sys.exit("More than one meta-interactome found. Please use just one at a time.")
+	if len(meta_file_list) == 0:
+		print("\nNo meta-interactome found.")
+		while ppi_data_filename == "":
+			ppi_data_option = raw_input("Retreive IntAct bacterial PPI or use local file(s) to build meta-interactome?\n"
+			"Enter:\n R for retrieval\n L for local file, \n M for multiple inputs, \n or X to quit.\n")
+			if ppi_data_option in ["R", "r"]:	#Downloads PPI data from IntAct server. 
+				#May not include all PPI available through HTTP IntAct interface.
+				ppi_data_filename = "protein-interactions.tab"
 				interaction_file_list = glob.glob(ppi_data_filename)
-			try:
-				interactionfile = open(interaction_file_list[0])
-			except IOError as e:
-				print("I/O error({0}): {1}".format(e.errno, e.strerror))
-		if ppi_data_option in ["L", "l"]:	#Uses a local file, usually a downloaded IntAct PPI set, in PSI-MI Tab27 format
-			print("Will use single local file. Note that it should be in PSI-MI TAB 2.7 format and have no header row.")
-			ppi_data_filename = raw_input("Please provide local filename.\n")
-			interaction_file_list = glob.glob(ppi_data_filename)
-			if len(interaction_file_list) == 0:
-				sys.exit("Can't find a file with that filename.")	
-		if ppi_data_option in ["M", "m"]:	#Uses multiple local files in PSI-MI Tab27 format
-			print("Will append multiple local files. Note that each should be in PSI-MI TAB 2.7 format and have no header row.")
-			adding_files = 1
-			interaction_file_list = []
-			while adding_files:
+				if len(interaction_file_list) >1:
+					sys.exit("One protein interaction file at a time, please! Check for duplicates.")
+				if len(interaction_file_list) == 0:
+					print("No protein interaction file found. Retrieving it.")
+					get_interactions()
+					interaction_file_list = glob.glob(ppi_data_filename)
+				try:
+					interactionfile = open(interaction_file_list[0])
+				except IOError as e:
+					print("I/O error({0}): {1}".format(e.errno, e.strerror))
+			if ppi_data_option in ["L", "l"]:	#Uses a local file, usually a downloaded IntAct PPI set, in PSI-MI Tab27 format
+				print("Will use single local file. Note that it should be in PSI-MI TAB 2.7 format and have no header row.")
 				ppi_data_filename = raw_input("Please provide local filename.\n")
-				files_present = glob.glob(ppi_data_filename)
-				if len(files_present) >0:
-					interaction_file_list.append(ppi_data_filename)	#Can be expanded easily later to do batch processing
-					print("Added " + ppi_data_filename + " to input list.")
-				else:
-					print("Can't find a file with that filename. Didn't add.")
-				ask_again = raw_input("Add another? Y/N\n")
-				if ask_again in ["N", "n"]:
-					adding_files = 0
-			print("Using the following inputs for the meta-interactome:\n")
-			if len(interaction_file_list) == 0:
-				sys.exit("Input list is empty. Exiting...")
-			for item in interaction_file_list:
-				print(item)
-			print("Merging into a single file and checking for malformed interaction entries.")
-			ppi_data_filename = merge_data(interaction_file_list)
-		if ppi_data_option in ["X", "x"]:
+				interaction_file_list = glob.glob(ppi_data_filename)
+				if len(interaction_file_list) == 0:
+					sys.exit("Can't find a file with that filename.")	
+			if ppi_data_option in ["M", "m"]:	#Uses multiple local files in PSI-MI Tab27 format
+				print("Will append multiple local files. Note that each should be in PSI-MI TAB 2.7 format and have no header row.")
+				adding_files = 1
+				interaction_file_list = []
+				while adding_files:
+					ppi_data_filename = raw_input("Please provide local filename.\n")
+					files_present = glob.glob(ppi_data_filename)
+					if len(files_present) >0:
+						interaction_file_list.append(ppi_data_filename)	#Can be expanded easily later to do batch processing
+						print("Added " + ppi_data_filename + " to input list.")
+					else:
+						print("Can't find a file with that filename. Didn't add.")
+					ask_again = raw_input("Add another? Y/N\n")
+					if ask_again in ["N", "n"]:
+						adding_files = 0
+				print("Using the following inputs for the meta-interactome:\n")
+				if len(interaction_file_list) == 0:
+					sys.exit("Input list is empty. Exiting...")
+				for item in interaction_file_list:
+					print(item)
+				print("Merging into a single file and checking for malformed interaction entries.")
+				ppi_data_filename = merge_data(interaction_file_list)
+			if ppi_data_option in ["X", "x"]:
+				sys.exit("Exiting...")
+	
+	#Load meta-interactome network file
+	#Needs to be built first.
+	new_meta = 0
+	if len(meta_file_list) == 0:
+		build_meta_network = raw_input("Build a new meta-interactome? Y/N ")
+		if build_meta_network in ["Y", "y"]:
+			new_meta_result = build_meta(mapping_file_list, ppi_data_filename)
+			new_meta_filename = new_meta_result[0]
+			taxids_and_context = new_meta_result[1]
+			new_meta = 1
+		else:
+			sys.exit("Meta-network needed. Exiting.")
+	try:
+		if new_meta == 1:
+			metafile = open(new_meta_filename)
+		else:
+			metafile = open(meta_file_list[0])
+	except IOError as e:
+		print("I/O error({0}): {1}".format(e.errno, e.strerror))	
+	print("\nUsing " + metafile.name + " as the meta-interactome network.")
+	
+	#Load consensus network file
+	#Needs to be built first.
+	consensus_file_list = glob.glob('*consensus*.txt')
+	new_consensus = 0
+	if len(consensus_file_list) >1:
+		sys.exit("One consensus network at a time, please!")
+	if len(consensus_file_list) == 0:
+		print("No consensus network file found. Building one.")
+		description_file = open("bactNOG.annotations.tsv")
+		if new_meta == 1:	#If we just build a meta-interactome we have taxid details already
+			new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
+		else:	#Otherwise we need to read taxid details from file - just rebuild dict from it
+			taxid_ref_list = glob.glob('taxid_context*.txt')
+			taxids_and_context = {}
+			if len(taxid_ref_list) >1:
+				sys.exit("Something went wrong - more than one taxid context file found.")
+			if len(taxid_ref_list) == 0:
+				sys.exit("Something went wrong - no taxid context file found.")
+			taxid_ref_file = open(taxid_ref_list[0])
+			for line in taxid_ref_file:
+				content = ((line.rstrip()).split("\t"))
+				taxids_and_context[content[0]] = [content[1], content[2], content[3]]
+			taxid_ref_file.close()
+			new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
+		new_consensus = 1
+	try:
+		if new_consensus == 1:
+			consensusfile = open(new_consensus_filename)
+		else:
+			consensusfile = open(consensus_file_list[0])
+	except IOError as e:
+		print("I/O error({0}): {1}".format(e.errno, e.strerror))	
+	print("\nUsing " + consensusfile.name + " as the consensus network.")
+	
+	#Quit now or ask for next step.
+	requested = 0
+	while requested == 0:
+		print("\n------------------------------------------------------------")
+		request_next = raw_input("\nChoose from the following options.\n" 
+			"A: Generate expanded subgraphs of the consensus network, filtering by function.\n"
+			"B: Generate a predicted interactome for one or more proteomes.\n"
+			"C: Get statistics for the consensus meta-interactome.\n"
+			"X: Exit.\n") 
+		if request_next in ["x", "X"]:
 			sys.exit("Exiting...")
-
-#Load meta-interactome network file
-#Needs to be built first.
-new_meta = 0
-if len(meta_file_list) == 0:
-	build_meta_network = raw_input("Build a new meta-interactome? Y/N ")
-	if build_meta_network in ["Y", "y"]:
-		new_meta_result = build_meta(mapping_file_list, ppi_data_filename)
-		new_meta_filename = new_meta_result[0]
-		taxids_and_context = new_meta_result[1]
-		new_meta = 1
-	else:
-		sys.exit("Meta-network needed. Exiting.")
-try:
-	if new_meta == 1:
-		metafile = open(new_meta_filename)
-	else:
-		metafile = open(meta_file_list[0])
-except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
-print("\nUsing " + metafile.name + " as the meta-interactome network.")
-
-#Load consensus network file
-#Needs to be built first.
-consensus_file_list = glob.glob('*consensus*.txt')
-new_consensus = 0
-if len(consensus_file_list) >1:
-	sys.exit("One consensus network at a time, please!")
-if len(consensus_file_list) == 0:
-	print("No consensus network file found. Building one.")
-	description_file = open("bactNOG.annotations.tsv")
-	if new_meta == 1:	#If we just build a meta-interactome we have taxid details already
-		new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
-	else:	#Otherwise we need to read taxid details from file - just rebuild dict from it
-		taxid_ref_list = glob.glob('taxid_context*.txt')
-		taxids_and_context = {}
-		if len(taxid_ref_list) >1:
-			sys.exit("Something went wrong - more than one taxid context file found.")
-		if len(taxid_ref_list) == 0:
-			sys.exit("Something went wrong - no taxid context file found.")
-		taxid_ref_file = open(taxid_ref_list[0])
-		for line in taxid_ref_file:
-			content = ((line.rstrip()).split("\t"))
-			taxids_and_context[content[0]] = [content[1], content[2], content[3]]
-		taxid_ref_file.close()
-		new_consensus_filename = build_consensus(metafile, annotation_file_list, taxids_and_context)
-	new_consensus = 1
-try:
-	if new_consensus == 1:
-		consensusfile = open(new_consensus_filename)
-	else:
-		consensusfile = open(consensus_file_list[0])
-except IOError as e:
-	print("I/O error({0}): {1}".format(e.errno, e.strerror))	
-print("\nUsing " + consensusfile.name + " as the consensus network.")
-
-#Quit now or ask for next step.
-requested = 0
-while requested == 0:
-	print("\n------------------------------------------------------------")
-	request_next = raw_input("\nChoose from the following options.\n" 
-		"A: Generate expanded subgraphs of the consensus network, filtering by function.\n"
-		"B: Generate a predicted interactome for one or more proteomes.\n"
-		"C: Get statistics for the consensus meta-interactome.\n"
-		"X: Exit.\n") 
-	if request_next in ["x", "X"]:
-		sys.exit("Exiting...")
-	if request_next in ["a", "A"]:
-		subgraph_expansion(metafile, consensusfile)
-	if request_next in ["b", "B"]:
-		predict_interactome(mapping_file_list, metafile, consensusfile)
-	if request_next in ["c", "C"]:
-		describe_consensus(consensusfile)
-	print("\nChoose from the list, please.")
+		if request_next in ["a", "A"]:
+			subgraph_expansion(metafile, consensusfile)
+		if request_next in ["b", "B"]:
+			predict_interactome(mapping_file_list, metafile, consensusfile)
+		if request_next in ["c", "C"]:
+			describe_consensus(consensusfile)
+		print("\nChoose from the list, please.")
+	
+	
+if __name__ == "__main__":
+	main()
+	
 			
 sys.exit(0)
