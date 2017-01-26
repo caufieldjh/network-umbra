@@ -113,7 +113,7 @@ from bs4 import BeautifulSoup
 from collections import Counter
 from datetime import date
 
-Entrez.email = 'caufieldjh@vcu.edu'
+Entrez.email = 'your.email.address@goes.here'
 
 #Options
 useViruses = True	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
