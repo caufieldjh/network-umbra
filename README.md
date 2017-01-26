@@ -5,6 +5,9 @@ Intended for use with bacterial proteins.
 Uses eggNOG v.4.1 for orthology assignments.
 Can also retrieve proteomes from Uniprot, assign their proteins to orthologs, and predict interactions among those orthologs.
 
+Uses Entrez services.
+Change the Entrez.email value to your email address before use.
+
 **REQUIRES**: 
 
 **Biopython 1.65** or more recent. Try installing with **pip**:
