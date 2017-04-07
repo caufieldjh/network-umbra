@@ -20,14 +20,6 @@ OUTPUT:
   the UniProtAC of the protein
   a binary value indicating whether the protein maps to an OG (0 if no, 1 if yes)
   
-WORK IN PROGRESS:
-  Adding ability to map viral proteins to eggNOG's new viral OGs.
-  Providing function annotations on mapped proteins.
-  Making loading bars nicer and more informative.
-  
-PLANNED ADDITIONS:
-  Make this a module for Network_umbra.py and remove this functionality from that base.
-
 '''
 
 import glob, gzip, operator, os, re, requests, sys, urllib2, zipfile
@@ -36,10 +28,10 @@ from bs4 import BeautifulSoup
 from collections import Counter
 from datetime import date
 
-Entrez.email = 'caufieldjh@vcu.edu'
+Entrez.email = ''
 
 #Options
-useViruses = True	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
+useViruses = False	#Option for using eggNOG's viral OGs. Requires the filters permitting only Bacteria to be modified
 					#Also requires the viral OGs to be downloaded and added.
 					#This option needs to be set True BEFORE the Uniprot to OG map is built or it won't include proteins from viruses
 #NOTE: Viruses are not currently in the eggNOG ID conversion file
@@ -399,9 +391,16 @@ def get_eggnog_annotations():
 	for filename in all_compressed_files:
 		os.remove(filename)
 		
-def get_mapped_proteome(mapping_file_list):
+def get_mapped_proteome(mapping_file_list, custom):
 	cwd = os.getcwd()
 	storage_path = "proteomes"
+	proteome_list = []
+	
+	if custom:
+		custom_list = raw_input("Please provide the name of a file"
+								" containing one UniprotAC per line.\n")
+		proteome_list.append(custom_list)
+		
 	if not os.path.isdir(storage_path):
 		try: 
 			os.mkdir(storage_path)
@@ -410,18 +409,19 @@ def get_mapped_proteome(mapping_file_list):
 			if not os.path.isdir(storage_path):
 				raise
 	
-	getting_proteomes = 1			#Can retrieve proteome entries from Uniprot and will map to OGs.
-	while getting_proteomes == 1:
-		get_new_proteomes = raw_input("Get a proteome from Uniprot? (Y/N)\n")
-		if get_new_proteomes in ["Y", "y"]:
-			get_a_proteome()	#run get_a_proteome() method
-		else:
-			print("Will now map proteomes to OGs.")
-			break
-	
-	os.chdir(storage_path)
-	proteome_list = glob.glob('proteome_raw_*.txt')	#Raw proteomes, from Uniprot, in list format, labeled with taxid
-	os.chdir("..")
+	if not custom:
+		getting_proteomes = 1			#Can retrieve proteome entries from Uniprot and will map to OGs.
+		while getting_proteomes == 1:
+			get_new_proteomes = raw_input("Get a proteome from Uniprot? (Y/N)\n")
+			if get_new_proteomes in ["Y", "y"]:
+				get_a_proteome()	#run get_a_proteome() method
+			else:
+				print("Will now map proteomes to OGs.")
+				break
+		
+		os.chdir(storage_path)
+		proteome_list = glob.glob('proteome_raw_*.txt')	#Raw proteomes, from Uniprot, in list format, labeled with taxid
+		os.chdir("..")
 	
 	map_dict = {}	#Dictionary for Uniprot to OG maps
 	
@@ -440,16 +440,25 @@ def get_mapped_proteome(mapping_file_list):
 	unmapped_taxids = [] #These are the taxids without any OG mapping
 	for proteome_filename in proteome_list:					#Map all available raw proteomes to OGs.
 		#Proteins without OG mappings retain their Uniprot IDs but we keep track of it in an extra column, too
-		os.chdir(storage_path)
+		
 		print("Mapping proteins in " + proteome_filename)
-		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
+		
+		if not custom:
+			taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
+			proteome_map_filename = proteome_filename.replace("raw", "map")
+			os.chdir(storage_path)
+		else:
+			proteome_map_filename = ("%s%s%s" % (proteome_filename[:-4],
+										"_map", proteome_filename[-4:]))
+			
 		proteome_proteins = []
-		proteome_map_filename = proteome_filename.replace("raw", "map")
+		
 		try:
 			proteome_file = open(proteome_filename)
 			proteome_map_file = open(proteome_map_filename, "w")
 		except IOError as e:
 			print("I/O error({0}): {1}".format(e.errno, e.strerror))
+			
 		for line in proteome_file:
 			one_protein = line.rstrip()
 			proteome_proteins.append(one_protein)
@@ -475,34 +484,35 @@ def get_mapped_proteome(mapping_file_list):
 			unmapped_taxids.append(taxid)
 		os.chdir("..")
 	
-	os.chdir(storage_path)
-	proteome_map_list = glob.glob('proteome_map_*.txt')	#Proteomes mapped to eggNOG OGs, labeled with taxid
-	os.chdir("..")
-	
-	#Uses Entrez here for more info about taxid corresponding to proteome.
-	print("\nAvailable proteome maps:")
-	taxid_context = {}	#We'll keep the taxonomy information for later.
-	for proteome_filename in proteome_map_list:
-		taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
-		target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
-		target_records = Entrez.read(target_handle)
-		#print(target_records)
-		taxid_name = target_records[0]["ScientificName"]
-		taxid_parent = target_records[0]["ParentTaxId"]
-		taxid_division = target_records[0]["Division"]
-		if taxid_division != "Bacteria" and useViruses == False:
-			nameline = (taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
-		if taxid_division == "Viruses" and useViruses == True:
-			nameline = (taxid_name + "\t\t" + proteome_filename + "\tNOTE: This is a viral proteome. Ensure your meta-interactome uses viral proteins.")
-		else:
-			nameline = (taxid_name + "\t\t" + proteome_filename)
-		if taxid in unmapped_taxids:
-			nameline = "** " + nameline
-		print(nameline)
-		taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]	#Not used at the moment
+	if not custom:
+		os.chdir(storage_path)
+		proteome_map_list = glob.glob('proteome_map_*.txt')	#Proteomes mapped to eggNOG OGs, labeled with taxid
+		os.chdir("..")
 		
-	if len(unmapped_taxids) > 0:
-		print("Maps marked with ** have no OG mappings.")
+		#Uses Entrez here for more info about taxid corresponding to proteome.
+		print("\nAvailable proteome maps:")
+		taxid_context = {}	#We'll keep the taxonomy information for later.
+		for proteome_filename in proteome_map_list:
+			taxid = ((proteome_filename.split("_"))[2]).rstrip(".txt")
+			target_handle = Entrez.efetch(db="Taxonomy", id=str(taxid), retmode="xml")
+			target_records = Entrez.read(target_handle)
+			#print(target_records)
+			taxid_name = target_records[0]["ScientificName"]
+			taxid_parent = target_records[0]["ParentTaxId"]
+			taxid_division = target_records[0]["Division"]
+			if taxid_division != "Bacteria" and useViruses == False:
+				nameline = (taxid_name + "\t\t" + proteome_filename + "\tNOTE: Not Bacteria! May not work well with bacterial consensus networks.")
+			if taxid_division == "Viruses" and useViruses == True:
+				nameline = (taxid_name + "\t\t" + proteome_filename + "\tNOTE: This is a viral proteome. Ensure your meta-interactome uses viral proteins.")
+			else:
+				nameline = (taxid_name + "\t\t" + proteome_filename)
+			if taxid in unmapped_taxids:
+				nameline = "** " + nameline
+			print(nameline)
+			taxid_context[taxid] = [taxid_name, taxid_parent, taxid_division]	#Not used at the moment
+			
+		if len(unmapped_taxids) > 0:
+			print("Maps marked with ** have no OG mappings.")
 	
 	print("\nComplete.\n")
 	
@@ -621,11 +631,16 @@ def main():
 	while requested == 0:
 		request_next = raw_input("\nChoose from the following options.\n" 
 			"A: Download a reference proteome and map to OGs.\n"
+			"B: Provide a list of UniprotAC IDs to map to OGs.\n"
 			"X: Exit.\n") 
 		if request_next in ["x", "X"]:
 			sys.exit("Exiting...")
 		if request_next in ["a", "A"]:
-			get_mapped_proteome(mapping_file_list)
+			custom = False
+			get_mapped_proteome(mapping_file_list, custom)
+		if request_next in ["b", "B"]:
+			custom = True
+			get_mapped_proteome(mapping_file_list, custom)
 	
 		print("\nChoose from the list, please.")
 
